@@ -128,6 +128,9 @@ function setPasswordScreen(){
 }
 function noAccess(){app.innerHTML=`<div class="login"><div class="box"><h1>Доступ не надано</h1><div class="msg">Ваш обліковий запис не активний. Зверніться до адміністратора.</div><button class="btn sec" id="lo">Вийти</button></div></div>`;document.getElementById('lo').onclick=()=>sb.auth.signOut().then(()=>loginScreen())}
 
+/* ---------- icon (shown only after login; stored in the private bucket) ---------- */
+async function loadIcon(){try{const {data}=await sb.storage.from('templates').createSignedUrl('favicon.png',12*3600);if(!data)return;
+ ['favicon','touchicon'].forEach(id=>{const l=document.getElementById(id);if(l){l.type='image/png';l.href=data.signedUrl}})}catch(e){}}
 /* ---------- loading ---------- */
 async function q(table,order){let r=sb.from(table).select('*');if(order)r=r.order(order);const {data,error}=await r;if(error)throw error;return data||[]}
 async function loadAll(){
@@ -147,7 +150,7 @@ async function start(){
  if(LINK_TYPE==='invite'||LINK_TYPE==='recovery'){if(!start.pwDone){start.pwDone=true;setPasswordScreen();return}}
  const {data:pf}=await sb.from('profiles').select('*').eq('id',USER.id).maybeSingle();
  if(!pf||!pf.active){noAccess();return}
- PROFILE=pf;role=pf.role;
+ PROFILE=pf;role=pf.role;loadIcon();
  app.innerHTML='<div class="loading">Завантаження даних…</div>';
  try{await loadAll()}catch(e){app.innerHTML=`<div class="login"><div class="box"><h1>Помилка завантаження</h1><div class="msg">${esc(e.message)}</div></div></div>`;return}
  route();
