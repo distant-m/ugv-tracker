@@ -1,3 +1,5 @@
 .DS_Store
 *.local
 .env
+supabase/02_seed.sql
+*.seed.sql
