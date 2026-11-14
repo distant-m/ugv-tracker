@@ -239,9 +239,9 @@ function renderGantt(v){
  const tiles=TRACKS.filter(tk=>tk.kind==='training'&&tk.target).map(tk=>{const b=T.byTrack[tk.id];return `<div class="tile"><div class="k">${esc(tk.tag)} · ${esc(nm(tk,'name'))}</div><div class="v num">${fmtN(b.fact)} <small>${t('of')} ${esc(tk.target_label||tk.target)}</small></div>${meter(b.fact,tk.target,b.exp)}<div class="s">${esc(t('expected'))}: <span class="num">${fmtN(b.exp)}</span></div></div>`}).join('');
  const tags=[...new Set(TRACKS.map(tk=>tk.tag))].filter(x=>x!=='ЕТАПИ');
  v.innerHTML=`<div style="display:flex;flex-direction:column;gap:14px">
- <div class="tiles">${tiles}
+ <div class="stick" id="pageStick"><div class="tiles">${tiles}
   <div class="tile"><div class="k">${esc(t('k_w'))}</div><div class="v num">${fmtPct(wShare)}</div>${meter(wShare||0,20,10)}<div class="s">${esc(t('goal10'))} · <span class="num">${fmtN(T.certF)}</span> ${t('of')} <span class="num">${fmtN(T.cert)}</span></div></div>
-  <div class="tile ${T.late?'alert':''}"><div class="k">${esc(t('k_late'))}</div><div class="v num">${T.late}</div><div class="s">${esc(t('lateHint'))}</div></div></div>
+  <div class="tile ${T.late?'alert':''}"><div class="k">${esc(t('k_late'))}</div><div class="v num">${T.late}</div><div class="s">${esc(t('lateHint'))}</div></div></div></div>
  <div class="bar-tools"><div class="chips">${tags.map(k=>`<button class="chip" data-f="${esc(k)}" aria-pressed="${filters[k]!==false}">${esc(k)}</button>`).join('')}</div>
   <div class="legend"><span><i class="sw s-future"></i>${esc(t('lg_future'))}</span><span><i class="sw s-active"></i>${esc(t('lg_active'))}</span><span><i class="sw s-done"></i>${esc(t('lg_done'))}</span><span><i class="sw s-late"></i>${esc(t('lg_late'))}</span></div>
   <div class="seg" role="group" aria-label="Zoom">${[3,5,9,16].map((z,i)=>`<button data-z="${z}" aria-pressed="${ppd===z}">${['−−','−','+','++'][i]}</button>`).join('')}</div></div>
@@ -249,6 +249,7 @@ function renderGantt(v){
  v.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{filters[b.dataset.f]=filters[b.dataset.f]===false;render()});
  v.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>{const gEl=document.getElementById('gantt');const c=(gEl.scrollLeft+gEl.clientWidth/2)/ppd;ppd=+b.dataset.z;render();const g2=document.getElementById('gantt');g2.scrollLeft=c*ppd-g2.clientWidth/2});
  v.querySelector('#gantt').addEventListener('click',e=>{const b=e.target.closest('[data-open]');if(b)openDrawer(b.dataset.open,b.dataset.id)});
+ watchStick();
  const gEl=v.querySelector('#gantt');if(!scrolled){scrolled=true;gEl.scrollLeft=Math.max(0,diff(START,TODAY)*ppd-gEl.clientWidth*0.35)}
 }
 function ganttHTML(){
@@ -391,7 +392,7 @@ const linkify=x=>esc(x).replace(/https:\/\/[^\s<]+/g,u=>`<a class="ext" href="${
 function staffTotals(){let all=0,ok=0,nda=0,sec=0,resp=0;const vac={1:[],2:[],3:[],4:[]};POS.forEach(o=>slotsOf(o.id).forEach((s,i)=>{if(s.off)return;all++;const st=slotState(s);if(st==='ok')ok++;if(st==='vacant')(vac[o.level]||(vac[o.level]=[])).push(slotLabel(o,i));if(docOk(s,'nda'))nda++;if(docOk(s,'sec'))sec++;if(docOk(s,'resp'))resp++}));return{all,ok,nda,sec,resp,vac}}
 function staffSummary(){const T=staffTotals();const uk=lang==='uk';const nv=Object.values(T.vac).reduce((a,l)=>a+l.length,0);
  const tile=(k,v,a)=>`<div class="tile${a&&v>=a?' full':' alert'}"><div class="k">${esc(k)}</div><div class="v num">${v} <small>${t('of')} ${a}</small></div>${meter(v,a)}</div>`;
- return `<div class="stick" id="staffStick"><div class="tiles">${tile(uk?'Посади укомплектовано':'Positions staffed',T.ok,T.all)}${tile('NDA',T.nda,T.all)}${tile(uk?'Безпека':'Security',T.sec,T.all)}${tile(uk?'Обов’язки підписано':'Duties signed',T.resp,T.all)}</div></div>
+ return `<div class="stick" id="pageStick"><div class="tiles">${tile(uk?'Посади укомплектовано':'Positions staffed',T.ok,T.all)}${tile('NDA',T.nda,T.all)}${tile(uk?'Безпека':'Security',T.sec,T.all)}${tile(uk?'Обов’язки підписано':'Duties signed',T.resp,T.all)}</div></div>
  ${nv?`<div class="vac"><div class="vh">${uk?'Вакантні посади':'Vacant positions'} · ${nv}</div>${[1,2,3,4].filter(l=>(T.vac[l]||[]).length).map(l=>`<div class="vl"><div class="vlh">${esc(n(LVN[l]))}</div><div>${T.vac[l].map(esc).join(', ')}</div></div>`).join('')}</div>`:''}`}
 const BW=196,CH=96,HG=16,VG=44,VS=20,SG=8,STI=18,SIDEG=32;
 const bySort=(a,b)=>(a.sort??0)-(b.sort??0);
@@ -439,7 +440,7 @@ function layout(cols){cols=cols||1;const out=[];let d='';const root=POS.find(o=>
   out.push({o:sd,x:sx,y:0,w:BW});let yy=CH;let px=sx+BW/2;
   const down=(o,yTop)=>{allKids(o).forEach(c=>{const ny=Math.max(yTop+CH+VS,y1);d+=`M${px} ${yTop+CH}V${ny}`;out.push({o:c,x:sx,y:ny,w:BW});down(c,ny)})};down(sd,0);TW=sx+BW});
  const TH=Math.max(...out.map(b=>b.y+CH));return{out,d,TW,TH}}
-function treeHTML(v){const avail=Math.max(320,v.clientWidth-30);const st=document.getElementById('staffStick');const sh=st?Math.min(st.offsetHeight,70):60;const vh=window.innerHeight-sh-70;
+function treeHTML(v){const avail=Math.max(320,v.clientWidth-30);const st=document.getElementById('pageStick');const sh=st?Math.min(st.offsetHeight,70):60;const vh=window.innerHeight-sh-70;
  const cand=[1,2].map(c=>{const L=layout(c);const wf=avail/(L.TW||1),hf=vh/(L.TH||1);return{L,wf,hf,full:Math.min(1.12,wf,hf)}});
  let pick=cand.reduce((a,b)=>b.full>a.full?b:a);let fit=pick.full;if(fit<.8){pick=cand[0];fit=Math.min(1.12,pick.wf,Math.max(pick.hf,.9))}const Lo=pick.L;const z=staffZoom==null||staffZoom==='fit'?fit:staffZoom;let boxes='';
  Lo.out.forEach(({o,x,y,w})=>boxes+=cardHTML(o,x,y,w));
@@ -477,7 +478,7 @@ function drawPos(pid){const o=posOf(pid);if(!o)return closeDrawer();const uk=lan
  dr.querySelectorAll('.lrow').forEach(b=>b.onclick=()=>openSlot(b.dataset.sid,pid));
  dr.querySelectorAll('[data-addslot]').forEach(b=>b.onclick=async()=>{const idx=slotsOf(pid).reduce((a,s)=>Math.max(a,s.idx),-1)+1;
   const {data,error}=await sb.from('staff_slots').insert({position_id:pid,idx}).select().single();if(error){toast(t('saveErr')+error.message,true);return}SLOTS.push(data);refreshStaff();drawPos(pid)})}
-let stickBound=false;function watchStick(){const upd=()=>{const el=document.getElementById('staffStick');if(!el)return;el.classList.toggle('stuck',el.getBoundingClientRect().top<=0.5&&window.scrollY>40)};
+let stickBound=false;function watchStick(){const upd=()=>{const el=document.getElementById('pageStick');if(!el)return;const was=el.classList.contains('stuck');const vw0=document.getElementById('view');if(!was){el.dataset.fh=el.offsetHeight;if(vw0)vw0.style.minHeight=Math.ceil(el.parentElement.getBoundingClientRect().top-vw0.getBoundingClientRect().top+window.innerHeight-24)+'px'}const now=el.getBoundingClientRect().top<=0.5&&window.scrollY>40;if(now!==was)el.classList.toggle('stuck',now)};
  if(!stickBound){stickBound=true;window.addEventListener('scroll',upd,{passive:true});window.addEventListener('resize',()=>{if(tab==='staff'&&staffZoom==null)refreshStaff()})}upd()}
 const slotTimers={};
 function saveSlot(s,patch,now){Object.assign(s,patch);const key=s.id+Object.keys(patch).join();clearTimeout(slotTimers[key]);const go=()=>save(sb.from('staff_slots').update(patch).eq('id',s.id));if(now)go();else slotTimers[key]=setTimeout(go,700)}

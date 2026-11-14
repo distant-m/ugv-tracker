@@ -137,6 +137,10 @@ aside.drawer{position:fixed;top:0;right:0;bottom:0;width:min(520px,100%);backgro
 .stick.stuck .tile{flex-direction:row;align-items:baseline;justify-content:space-between;padding:6px 12px;gap:10px}
 .stick.stuck .tile .v{font-size:19px}
 .stick.stuck .tile .meter{display:none}
+.stick.stuck .tile .s{display:none}
+.stick.stuck .tile .k{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+.stick.stuck .tile .v{white-space:nowrap;flex:0 0 auto}
+.stick.stuck .tile .v small{font-size:13px}
 .vac{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:12px;font-size:14.5px}
 .vh{font-weight:600;font-size:15px}
 .vl{display:flex;flex-direction:column;gap:3px}
@@ -223,3 +227,5 @@ body{margin:0}
 .trk label{display:flex;gap:4px;align-items:center}
 .themebtn{display:inline-flex;gap:6px;align-items:center}
 .plist{display:flex;flex-direction:column;gap:8px}
+html,body{overflow-anchor:none}
+.stick.stuck .tile .k{text-transform:none;letter-spacing:0;font-size:14px}
