@@ -229,3 +229,7 @@ body{margin:0}
 .plist{display:flex;flex-direction:column;gap:8px}
 html,body{overflow-anchor:none}
 .stick.stuck .tile .k{text-transform:none;letter-spacing:0;font-size:14px}
+.fmg{display:grid;grid-template-columns:auto auto auto;gap:4px 10px;align-items:end;font-size:13px;margin-bottom:6px}
+.fmg b{align-self:center;font-size:13.5px}
+.fmf{display:flex;flex-direction:column;gap:2px;color:var(--muted)}
+.fmres{font-size:14px;margin:4px 0}

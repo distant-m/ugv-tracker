@@ -116,6 +116,7 @@ create table if not exists public.indicators(
   value2 numeric,
   link text not null default ''
 );
+alter table public.indicators add column if not exists fm jsonb not null default '{}'::jsonb;  -- survey_fm: {sf,af,sm,am}
 
 create table if not exists public.admin_tasks(
   id text primary key,

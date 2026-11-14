@@ -323,9 +323,12 @@ function drawProc(p){if(!p)return closeDrawer();const c=procControls(p);const st
  bindProc(dr,()=>{drawProc(p);refreshView()})}
 
 /* ---------- indicators ---------- */
+const fmOf=r=>{const f=r.fm||{};const g=k=>Math.max(0,Math.round(+f[k]||0));return{sf:g('sf'),af:Math.min(g('af'),g('sf')),sm:g('sm'),am:Math.min(g('am'),g('sm'))}};
 function indValue(r,T){const uk=lang==='uk';const pp=uk?' п.п.':' pp';const src=r.source;
  if(src==='manual')return{v:r.value,txt:fmtN(r.value)};
  if(src==='manual2')return{v:r.value2,txt:`${fmtPct(r.value)} · ${fmtN(r.value2)}`};
+ if(src==='survey_fm'){const F=fmOf(r);const n=F.sf+F.sm,a=F.af+F.am;const W=uk?'Ж':'F',M=uk?'Ч':'M',sv=uk?'опитано':'surveyed';
+  return{v:n,p:pct(a,n),txt:`${fmtPct(pct(a,n))} · ${sv} ${fmtN(n)} (${W}: ${fmtPct(pct(F.af,F.sf))} · ${fmtN(F.sf)}; ${M}: ${fmtPct(pct(F.am,F.sm))} · ${fmtN(F.sm)})`}}
  const m=src.replace('auto:','');
  if(m==='sat')return{v:T.sat,txt:fmtPct(T.sat)};
  if(m==='cert')return{v:T.cert,txt:`${fmtN(T.cert)} · ${fmtPct(pct(T.cert,T.st))}`};
@@ -342,7 +345,10 @@ function indValue(r,T){const uk=lang==='uk';const pp=uk?' п.п.':' pp';const sr
 }
 function renderInd(v){const T=totals();const ed=isAdmin();
  const levels=[['ult','lvl_ult'],['int','lvl_int'],['imm','lvl_imm'],['out','lvl_out']];
- const row=r=>{const man=r.source.startsWith('manual');const val=indValue(r,T);
+ const fmIn=r=>{const F=fmOf(r);const uk=lang==='uk';const box=(k,l)=>`<label class="fmf">${esc(l)}<input class="inp num narrow" type="number" min="0" step="1" data-fm="${esc(r.id)}" data-k="${k}" value="${(r.fm||{})[k]??''}"></label>`;
+  return `<div class="fmg"><b>${uk?'Жінки':'Women'}</b>${box('sf',uk?'опитано':'surveyed')}${box('af',uk?'з них застосовують':'of them apply')}<b>${uk?'Чоловіки':'Men'}</b>${box('sm',uk?'опитано':'surveyed')}${box('am',uk?'з них застосовують':'of them apply')}</div>`};
+ const row=r=>{const man=r.source.startsWith('manual')||r.source==='survey_fm';const val=indValue(r,T);
+  if(r.source==='survey_fm'){const tp=parseFloat(String(r.target||'').replace(/[^0-9.]/g,''))||70;return `<tr><td style="min-width:240px">${esc(nm(r,'label'))}</td><td class="num" style="white-space:nowrap">${esc(r.baseline||'')}</td><td class="num" style="white-space:nowrap">${esc(r.target||'')}</td><td style="min-width:260px">${ed?fmIn(r):''}<div class="fmres num">${esc(val.txt)}</div>${meter(val.p||0,100,tp)}${r.target_num?meter(val.v||0,r.target_num):''}</td><td style="white-space:nowrap">${esc(t(r.freq))}</td><td>${ed?`<div style="display:flex;gap:6px;align-items:center;min-width:200px"><input class="inp url" data-il="${esc(r.id)}" value="${esc(r.link)}" placeholder="Google Doc" aria-label="link">${isUrl(r.link)?`<a class="ext" href="${esc(r.link)}" target="_blank" rel="noopener noreferrer">↗</a>`:''}</div>`:(isUrl(r.link)?`<a class="ext" href="${esc(r.link)}" target="_blank" rel="noopener noreferrer">${esc(t('open'))} ↗</a>`:'—')}</td></tr>`}
   const cur=man&&ed?(r.source==='manual2'?`<input class="inp num narrow" type="number" min="0" max="100" step="any" data-iv="${esc(r.id)}" data-pct="1" value="${r.value??''}" aria-label="%"> % · <input class="inp num narrow" type="number" min="0" step="1" data-iv2="${esc(r.id)}" value="${r.value2??''}" aria-label="n">`:`<input class="inp num narrow" type="number" min="0" step="any" data-iv="${esc(r.id)}" value="${r.value??''}" aria-label="value">`):`<span class="num">${esc(val.txt)}</span>`;
   const src=man?(ed?`<div style="display:flex;gap:6px;align-items:center;min-width:200px"><input class="inp url" data-il="${esc(r.id)}" value="${esc(r.link)}" placeholder="Google Doc" aria-label="link">${isUrl(r.link)?`<a class="ext" href="${esc(r.link)}" target="_blank" rel="noopener noreferrer">↗</a>`:''}</div>`:(isUrl(r.link)?`<a class="ext" href="${esc(r.link)}" target="_blank" rel="noopener noreferrer">${esc(t('open'))} ↗</a>`:'—')):`<span class="pill p-muted">${esc(r.source==='auto:kits'?t('fromProc'):t('auto'))}</span>`;
   return `<tr><td style="min-width:240px">${esc(nm(r,'label'))}</td><td class="num" style="white-space:nowrap">${esc(r.baseline||'')}</td><td class="num" style="white-space:nowrap">${esc(r.target||'')}</td><td style="min-width:150px">${cur}${val.v!==null&&val.v!==undefined&&r.target_num?meter(val.v||0,r.target_num):''}</td><td style="white-space:nowrap">${esc(t(r.freq))}</td><td>${src}</td></tr>`};
@@ -351,6 +357,8 @@ function renderInd(v){const T=totals();const ed=isAdmin();
  const upd=(id,patch)=>{const r=IND.find(x=>x.id===id);Object.assign(r,patch);save(sb.from('indicators').update(patch).eq('id',id)).then(()=>renderInd(v))};
  const clamp=(i,max)=>{if(i.value==='')return null;let x=Math.max(0,+i.value||0);if(max)x=Math.min(max,x);i.value=x;return x};
  v.querySelectorAll('[data-iv]').forEach(i=>i.onchange=()=>upd(i.dataset.iv,{value:clamp(i,i.dataset.pct?100:0)}));
+ v.querySelectorAll('[data-fm]').forEach(i=>i.onchange=()=>{const r=IND.find(x=>x.id===i.dataset.fm);const f=Object.assign({},r.fm||{});f[i.dataset.k]=i.value===''?null:Math.max(0,Math.round(+i.value||0));
+  if(f.af!=null&&f.sf!=null&&f.af>f.sf)f.af=f.sf;if(f.am!=null&&f.sm!=null&&f.am>f.sm)f.am=f.sm;upd(r.id,{fm:f})});
  v.querySelectorAll('[data-iv2]').forEach(i=>i.onchange=()=>upd(i.dataset.iv2,{value2:clamp(i)===null?null:Math.round(+i.value)}));
  v.querySelectorAll('[data-il]').forEach(i=>i.onchange=()=>upd(i.dataset.il,{link:i.value.trim()}));
 }
