@@ -40,7 +40,7 @@ const L={uk:{
  entry_avg:'Вхідний тест, середній бал, %',exit_avg:'Вихідний тест, середній бал, %',practical_pass:'Склали практичний іспит, осіб',satisfaction:'Задоволені навчанням, %',
  covered_f:'Охоплено — жінки',covered_m:'Охоплено — чоловіки',drill_pass:'Виконали практичне відпрацювання, осіб',part_f:'Учасники — жінки',part_m:'Учасники — чоловіки',
  d_request:'Заявка на навчання (лист-запит від підрозділу)',d_confirm:'Документи підтвердження (журнал, реєстр, сертифікати)',d_entry:'Вхідний тест — вигрузка',d_exit:'Вихідний тест — вигрузка',d_practical:'Оцінки практичного іспиту (за шаблоном)',
- d_satisfaction:'Анкета задоволеності групи',d_survey612:'Опитування випускників через 6–12 місяців',d_report:'Звіт / реєстрація учасників',d_video:'Посилання на відео',
+ d_satisfaction:'Анкета задоволеності групи',d_team_report:'Звіт виїзної команди',d_survey612:'Опитування випускників через 6–12 місяців',d_report:'Звіт / реєстрація учасників',d_video:'Посилання на відео',
  s_cert:'Сертифіковано',s_plan:'Від плану',s_women:'Частка жінок',s_gain:'Приріст балів',s_prac:'Практичний іспит',s_rate:'Успішність',s_cov:'Охоплено',s_drill:'Відпрацювання',s_part:'Учасників',
  waitFrom:'Очікується з',open:'Відкрити',close:'Закрити',paste:'Вставте посилання на Google-документ',
  missItems:'Бракує:',noIssues:'Усі дані та документи на місці.',notEnded:'Документи вносяться після завершення групи.',
@@ -66,7 +66,7 @@ const L={uk:{
  entry_avg:'Entry test, average score, %',exit_avg:'Exit test, average score, %',practical_pass:'Passed practical exam, people',satisfaction:'Satisfied with training, %',
  covered_f:'Covered — women',covered_m:'Covered — men',drill_pass:'Completed practical drill, people',part_f:'Participants — women',part_m:'Participants — men',
  d_request:'Training request (letter from the unit)',d_confirm:'Evidence documents (class log, register, certificates)',d_entry:'Entry test — export',d_exit:'Exit test — export',d_practical:'Practical exam scores (template)',
- d_satisfaction:'Group satisfaction questionnaire',d_survey612:'Graduate survey at 6–12 months',d_report:'Report / participant registration',d_video:'Video link',
+ d_satisfaction:'Group satisfaction questionnaire',d_team_report:'Mobile team report',d_survey612:'Graduate survey at 6–12 months',d_report:'Report / participant registration',d_video:'Video link',
  s_cert:'Certified',s_plan:'Of plan',s_women:'Women share',s_gain:'Score gain',s_prac:'Practical exam',s_rate:'Pass rate',s_cov:'Covered',s_drill:'Drill',s_part:'Participants',
  waitFrom:'Due from',open:'Open',close:'Close',paste:'Paste a Google Docs link',
  missItems:'Missing:',noIssues:'All data and documents are in place.',notEnded:'Documents are added once the group ends.',
@@ -160,7 +160,7 @@ sb.auth.onAuthStateChange((ev)=>{if(ev==='SIGNED_OUT'){USER=null;loginScreen()}e
 /* ---------- logic ---------- */
 const TYPES={
  course:{facts:['started_f','started_m','cert_f','cert_m','entry_avg','exit_avg','practical_pass','satisfaction'],docs:['request','confirm','entry','exit','practical','satisfaction','survey612']},
- mobile:{facts:['started_f','started_m','cert_f','cert_m','entry_avg','exit_avg','practical_pass','satisfaction'],docs:['request','confirm','entry','exit','practical','satisfaction','survey612']},
+ mobile:{facts:['started_f','started_m','cert_f','cert_m','entry_avg','exit_avg','practical_pass','satisfaction'],docs:['request','confirm','entry','exit','practical','satisfaction','team_report','survey612']},
  intro:{facts:['covered_f','covered_m','drill_pass'],docs:['confirm']},
  event:{facts:['part_f','part_m'],docs:['report']},
  lecture:{facts:[],docs:['video']},
@@ -374,16 +374,33 @@ function renderProc(v){
  </tbody></table></div></section>`;bindProc(v,()=>renderProc(v))}
 
 /* ---------- admin tasks ---------- */
-function renderTasks(v){const fr={every:t('every'),monthly:t('monthly'),q:t('q'),sem:t('sem')};
+/* Автоматичні задачі «для кожної групи»: admin_tasks.auto = doc:<поле>[@тип] | facts */
+function autoTask(x){const a=x.auto;if(!a)return null;const [rule,only]=a.split('@');const ty=g=>TYPES[g.type]||{facts:[],docs:[]};
+ let pool,ok;
+ if(rule==='facts'){pool=G.filter(g=>(!only||g.type===only)&&(ty(g).facts.length||ty(g).docs.length)&&diff(g.end,TODAY)>3);ok=g=>!missing(g).length}
+ else if(rule.startsWith('doc:')){const d=rule.slice(4);const after=d==='request'||d==='entry'?'start':'end';
+  pool=G.filter(g=>(!only||g.type===only)&&ty(g).docs.includes(d)&&(after==='start'?TODAY>=g.start:TODAY>g.end));ok=g=>!!(g.docs[d]||'').trim()}
+ else return null;
+ const miss=pool.filter(g=>!ok(g));return{total:pool.length,done:pool.length-miss.length,miss}}
+const openAuto=new Set();
+function renderTasks(v){const fr={every:t('every'),monthly:t('monthly'),q:t('q'),sem:t('sem')};const uk=lang==='uk';
+ const autoRow=(x,A)=>{const all=A.total&&!A.miss.length;const open=openAuto.has(x.id);
+  return `<div class="task auto"><span class="aic ${A.total?(all?'ok':'miss'):'wait'}">${A.total?(all?'✓':'!'):'·'}</span><div class="tt">${esc(nm(x,'title'))}</div>
+  <div class="tm"><span class="pill ${A.total?(all?'p-done':'p-late'):'p-muted'}">${A.total?`${A.done} ${t('of')} ${A.total} ${uk?'груп':'groups'}`:(uk?'ще немає груп для перевірки':'no groups to check yet')}</span>
+  ${A.miss.length?`<button class="linkbtn" data-am="${esc(x.id)}">${open?(uk?'Сховати':'Hide'):(uk?'Показати групи без цього':'Show groups missing it')} (${A.miss.length})</button>`:''}</div>
+  ${A.total?`<div class="tm">${meter(A.done,A.total)}</div>`:''}
+  ${open&&A.miss.length?`<div class="tm"><div class="lategroups">${A.miss.map(g=>`<button data-open="g" data-id="${esc(g.id)}">${esc(trackOf(g.track_id).tag)} · ${esc(nm(g,'title'))}</button>`).join('')}</div></div>`:''}</div>`};
  const taskRow=x=>{const dueD=x.due_month?monthEnd(x.due_month):null;const od=dueD&&!x.done&&TODAY>dueD;
   return `<div class="task ${x.done?'done':''}"><input type="checkbox" id="tk-${esc(x.id)}" data-tk="${esc(x.id)}" ${x.done?'checked':''}><label class="tt" for="tk-${esc(x.id)}">${esc(nm(x,'title'))}</label>
   <div class="tm">${dueD?`<span class="pill ${od?'p-late':x.done?'p-done':'p-muted'}">${esc(t('due'))} ${fmt(dueD)} · ${t('month')}${x.due_month}${od?' · '+esc(t('overdue')):''}</span>`:''}${x.freq?`<span class="pill p-muted">${esc(fr[x.freq]||x.freq)}</span>`:''}
   <input class="inp url" data-tl="${esc(x.id)}" value="${esc(x.link)}" placeholder="${esc(t('paste'))}" aria-label="link">${isUrl(x.link)?`<a class="ext" href="${esc(x.link)}" target="_blank" rel="noopener noreferrer">${esc(t('open'))} ↗</a>`:''}</div></div>`};
- const sec=k=>{const xs=TASKS.filter(x=>x.section===k);const d=xs.filter(x=>x.done).length;
-  return `<section class="panel"><h2>${esc(t('sec_'+k))} <span class="num ns">${d}/${xs.length}</span></h2><div>${xs.map(taskRow).join('')}</div>${k==='custom'?`<form class="addrow" id="addForm"><input class="inp" id="newTask" placeholder="${esc(t('addPh'))}" aria-label="${esc(t('addPh'))}"><button class="btn" type="submit">${esc(t('add'))}</button></form>`:''}</section>`};
+ const sec=k=>{const xs=TASKS.filter(x=>x.section===k);const d=xs.filter(x=>{const A=autoTask(x);return A?(A.total>0&&!A.miss.length):x.done}).length;
+  return `<section class="panel"><h2>${esc(t('sec_'+k))} <span class="num ns">${d}/${xs.length}</span></h2>${xs.some(x=>x.auto)?`<p class="lead">${uk?'Рахується автоматично з карток груп на графіку: після початку групи — заявка й вхідний тест, після завершення — решта.':'Counted automatically from the group cards on the chart: request and entry test once a group starts, the rest once it ends.'}</p>`:''}<div>${xs.map(x=>{const A=autoTask(x);return A?autoRow(x,A):taskRow(x)}).join('')}</div>${k==='custom'?`<form class="addrow" id="addForm"><input class="inp" id="newTask" placeholder="${esc(t('addPh'))}" aria-label="${esc(t('addPh'))}"><button class="btn" type="submit">${esc(t('add'))}</button></form>`:''}</section>`};
  v.innerHTML=`<div class="cols">${sec('launch')}<div style="display:flex;flex-direction:column;gap:16px">${sec('cycle')}${sec('period')}${sec('close')}${sec('custom')}</div></div>`;
  const upd=(id,patch)=>{const x=TASKS.find(y=>y.id===id);Object.assign(x,patch);save(sb.from('admin_tasks').update(patch).eq('id',id)).then(()=>renderTasks(v))};
  v.querySelectorAll('[data-tk]').forEach(c=>c.onchange=()=>upd(c.dataset.tk,{done:c.checked}));
+ v.querySelectorAll('[data-am]').forEach(b=>b.onclick=()=>{const id=b.dataset.am;openAuto.has(id)?openAuto.delete(id):openAuto.add(id);renderTasks(v)});
+ v.querySelectorAll('.task.auto [data-open]').forEach(b=>b.onclick=()=>openDrawer('g',b.dataset.id));
  v.querySelectorAll('[data-tl]').forEach(c=>c.onchange=()=>upd(c.dataset.tl,{link:c.value.trim()}));
  v.querySelector('#addForm').onsubmit=async e=>{e.preventDefault();const val=v.querySelector('#newTask').value.trim();if(!val)return;
   const row={id:'u'+Date.now(),section:'custom',title_uk:val,title_en:val,sort:1000+TASKS.length};if(await save(sb.from('admin_tasks').insert(row))){TASKS.push({...row,done:false,link:''});renderTasks(v)}};

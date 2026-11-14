@@ -129,6 +129,7 @@ create table if not exists public.admin_tasks(
   link text not null default '',
   sort integer not null default 0
 );
+alter table public.admin_tasks add column if not exists auto text;  -- doc:<поле>[@тип] | facts — рахується з груп
 
 create table if not exists public.positions(
   id text primary key,

@@ -236,3 +236,7 @@ b.fmt{padding-top:4px}
 .fmg b{align-self:center;font-size:13.5px}
 .fmf{display:flex;flex-direction:column;gap:2px;color:var(--muted)}
 .fmres{font-size:14px;margin:4px 0}
+.task.auto{grid-template-columns:24px 1fr}
+.aic{width:20px;height:20px;border-radius:4px;font-weight:700;font-size:13px;text-align:center;line-height:20px;margin-top:1px}
+.aic.ok{background:var(--on-bg);color:var(--on-fg)}.aic.miss{background:var(--late);color:#fff}.aic.wait{border:1.5px solid var(--line);color:var(--muted)}
+.task.auto .meter{flex:1 1 200px;max-width:320px}
