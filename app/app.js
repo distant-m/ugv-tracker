@@ -297,7 +297,7 @@ function drawGroup(g){if(!g)return closeDrawer();const tk=trackOf(g.track_id),ed
  <h3 class="ns" style="margin:0;text-transform:uppercase;letter-spacing:.07em">${esc(t('confirm'))}</h3><div>${docs}</div>`);
  const persist=()=>{dr.querySelector('#stBlock').innerHTML=statusBlock(g);const s=dr.querySelector('#stats');if(s)s.innerHTML=statsHTML(g);
   save(sb.from('groups').update({facts:g.facts,docs:g.docs}).eq('id',g.id));refreshView()};
- dr.querySelectorAll('[data-fact]').forEach(i=>i.onchange=()=>{g.facts[i.dataset.fact]=i.value===''?null:Math.max(0,+i.value);persist()});
+ dr.querySelectorAll('[data-fact]').forEach(i=>i.onchange=()=>{if(i.value!==''&&+i.value<0)i.value=0;g.facts[i.dataset.fact]=i.value===''?null:Math.max(0,+i.value);persist()});
  dr.querySelectorAll('[data-doc]').forEach(i=>i.onchange=()=>{const d=i.dataset.doc;g.docs[d]=i.value.trim();const lk=dr.querySelector(`[data-lk="${d}"]`);lk.innerHTML=isUrl(g.docs[d])?`<a class="ext" href="${esc(g.docs[d])}" target="_blank" rel="noopener noreferrer">${esc(t('open'))} ↗</a>`:'';persist()});
 }
 function refreshView(){const v=document.getElementById('view');if(!v)return;const gEl=document.getElementById('gantt');const sl=gEl?gEl.scrollLeft:0;
@@ -343,14 +343,15 @@ function indValue(r,T){const uk=lang==='uk';const pp=uk?' п.п.':' pp';const sr
 function renderInd(v){const T=totals();const ed=isAdmin();
  const levels=[['ult','lvl_ult'],['int','lvl_int'],['imm','lvl_imm'],['out','lvl_out']];
  const row=r=>{const man=r.source.startsWith('manual');const val=indValue(r,T);
-  const cur=man&&ed?(r.source==='manual2'?`<input class="inp num narrow" type="number" data-iv="${esc(r.id)}" value="${r.value??''}" aria-label="%"> % · <input class="inp num narrow" type="number" data-iv2="${esc(r.id)}" value="${r.value2??''}" aria-label="n">`:`<input class="inp num narrow" type="number" data-iv="${esc(r.id)}" value="${r.value??''}" aria-label="value">`):`<span class="num">${esc(val.txt)}</span>`;
+  const cur=man&&ed?(r.source==='manual2'?`<input class="inp num narrow" type="number" min="0" max="100" step="any" data-iv="${esc(r.id)}" data-pct="1" value="${r.value??''}" aria-label="%"> % · <input class="inp num narrow" type="number" min="0" step="1" data-iv2="${esc(r.id)}" value="${r.value2??''}" aria-label="n">`:`<input class="inp num narrow" type="number" min="0" step="any" data-iv="${esc(r.id)}" value="${r.value??''}" aria-label="value">`):`<span class="num">${esc(val.txt)}</span>`;
   const src=man?(ed?`<div style="display:flex;gap:6px;align-items:center;min-width:200px"><input class="inp url" data-il="${esc(r.id)}" value="${esc(r.link)}" placeholder="Google Doc" aria-label="link">${isUrl(r.link)?`<a class="ext" href="${esc(r.link)}" target="_blank" rel="noopener noreferrer">↗</a>`:''}</div>`:(isUrl(r.link)?`<a class="ext" href="${esc(r.link)}" target="_blank" rel="noopener noreferrer">${esc(t('open'))} ↗</a>`:'—')):`<span class="pill p-muted">${esc(r.source==='auto:kits'?t('fromProc'):t('auto'))}</span>`;
   return `<tr><td style="min-width:240px">${esc(nm(r,'label'))}</td><td class="num" style="white-space:nowrap">${esc(r.baseline||'')}</td><td class="num" style="white-space:nowrap">${esc(r.target||'')}</td><td style="min-width:150px">${cur}${val.v!==null&&val.v!==undefined&&r.target_num?meter(val.v||0,r.target_num):''}</td><td style="white-space:nowrap">${esc(t(r.freq))}</td><td>${src}</td></tr>`};
  v.innerHTML=`<section class="panel"><h2>${esc(t('tab_ind'))}</h2><p class="lead">${esc(t('ind_lead'))}</p><div class="tblwrap"><table><thead><tr><th>${esc(t('th_ind'))}</th><th>${esc(t('th_base'))}</th><th>${esc(t('th_target'))}</th><th>${esc(t('th_cur'))}</th><th>${esc(t('th_freq'))}</th><th>${esc(t('th_src'))}</th></tr></thead><tbody>
  ${levels.map(([lv,k])=>{const rs=IND.filter(r=>r.level===lv);return rs.length?`<tr class="lvl"><td colspan="6">${esc(t(k))}</td></tr>${rs.map(row).join('')}`:''}).join('')}</tbody></table></div></section>`;
  const upd=(id,patch)=>{const r=IND.find(x=>x.id===id);Object.assign(r,patch);save(sb.from('indicators').update(patch).eq('id',id)).then(()=>renderInd(v))};
- v.querySelectorAll('[data-iv]').forEach(i=>i.onchange=()=>upd(i.dataset.iv,{value:i.value===''?null:+i.value}));
- v.querySelectorAll('[data-iv2]').forEach(i=>i.onchange=()=>upd(i.dataset.iv2,{value2:i.value===''?null:+i.value}));
+ const clamp=(i,max)=>{if(i.value==='')return null;let x=Math.max(0,+i.value||0);if(max)x=Math.min(max,x);i.value=x;return x};
+ v.querySelectorAll('[data-iv]').forEach(i=>i.onchange=()=>upd(i.dataset.iv,{value:clamp(i,i.dataset.pct?100:0)}));
+ v.querySelectorAll('[data-iv2]').forEach(i=>i.onchange=()=>upd(i.dataset.iv2,{value2:clamp(i)===null?null:Math.round(+i.value)}));
  v.querySelectorAll('[data-il]').forEach(i=>i.onchange=()=>upd(i.dataset.il,{link:i.value.trim()}));
 }
 
