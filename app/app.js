@@ -206,6 +206,8 @@ function meter(cur,target,expected){const w=Math.min(100,target?cur/target*100:0
 /* ---------- shell ---------- */
 function exportBanner(){if(!isAdmin())return'';const le=SETTINGS.last_export;if(!le)return `<div class="banner"><span>${esc(t('exportNever'))}</span><button class="btn" data-export>${esc(t('export'))}</button></div>`;
  const d=new Date(le);if((Date.now()-d)/DAY>14)return `<div class="banner"><span>${esc(t('exportDue'))} ${esc(t('lastExport'))}${fmtDT(le)}</span><button class="btn" data-export>${esc(t('export'))}</button></div>`;return''}
+const isDark=()=>document.documentElement.dataset.theme==='dark';
+function setTheme(m){if(m==='dark')document.documentElement.dataset.theme='dark';else delete document.documentElement.dataset.theme;try{localStorage.setItem('theme',m)}catch(e){}}
 function render(){
  document.documentElement.lang=lang;const title=n(SETTINGS.project_title)||'Система контролю';document.title=title;
  const tabs=[['gantt','tab_gantt'],['indicators','tab_ind'],['procurement','tab_proc']];
@@ -214,6 +216,7 @@ function render(){
  app.innerHTML=`<header class="top"><div class="brand"><h1>${esc(title)}</h1><p>${esc(n(SETTINGS.project_subtitle))}</p></div>
   <div class="controls"><span class="who">${esc(PROFILE.nickname||PROFILE.email)} · ${esc(t('role_'+role))}</span>
   ${isAdmin()?`<button class="btn sec" data-export>${esc(t('export'))}</button>`:''}
+  <button class="btn sec themebtn" id="themeBtn" aria-pressed="${isDark()}">${isDark()?(lang==='uk'?'☀ Світла тема':'☀ Light theme'):(lang==='uk'?'☾ Темна тема':'☾ Dark theme')}</button>
   <div class="seg" role="group" aria-label="Language"><button data-lang="uk" aria-pressed="${lang==='uk'}">UA</button><button data-lang="en" aria-pressed="${lang==='en'}">EN</button></div>
   <button class="btn sec" id="logout">${esc(t('logout'))}</button></div></header>
  ${exportBanner()}
@@ -221,6 +224,7 @@ function render(){
  <main id="view"></main>`;
  app.querySelectorAll('[data-lang]').forEach(b=>b.onclick=()=>{lang=b.dataset.lang;try{localStorage.setItem('lang',lang)}catch(e){}render();if(drawer)drawer()});
  app.querySelector('#logout').onclick=()=>sb.auth.signOut();
+ app.querySelector('#themeBtn').onclick=()=>{setTheme(isDark()?'light':'dark');render();if(drawer)drawer()};
  app.querySelectorAll('[data-export]').forEach(b=>b.onclick=exportXlsx);
  const v=app.querySelector('#view');
  ({gantt:renderGantt,indicators:renderInd,procurement:renderProc,tasks:renderTasks,staff:renderStaff,users:renderUsers,log:renderLog})[tab](v);
@@ -386,26 +390,61 @@ const marks=s=>`<span class="mks">${DOCS.map(([k,l,sh])=>`<span class="mk${docOk
 const linkify=x=>esc(x).replace(/https:\/\/[^\s<]+/g,u=>`<a class="ext" href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
 function staffTotals(){let all=0,ok=0,nda=0,sec=0,resp=0;const vac={1:[],2:[],3:[],4:[]};POS.forEach(o=>slotsOf(o.id).forEach((s,i)=>{if(s.off)return;all++;const st=slotState(s);if(st==='ok')ok++;if(st==='vacant')(vac[o.level]||(vac[o.level]=[])).push(slotLabel(o,i));if(docOk(s,'nda'))nda++;if(docOk(s,'sec'))sec++;if(docOk(s,'resp'))resp++}));return{all,ok,nda,sec,resp,vac}}
 function staffSummary(){const T=staffTotals();const uk=lang==='uk';const nv=Object.values(T.vac).reduce((a,l)=>a+l.length,0);
- const tile=(k,v,a,alert)=>`<div class="tile${alert?' alert':''}"><div class="k">${esc(k)}</div><div class="v num">${v} <small>${t('of')} ${a}</small></div>${meter(v,a)}</div>`;
- return `<div class="tiles">${tile(uk?'Посади укомплектовано':'Positions staffed',T.ok,T.all,T.ok<T.all)}${tile('NDA',T.nda,T.all)}${tile(uk?'Безпека':'Security',T.sec,T.all)}${tile(uk?'Обов’язки підписано':'Duties signed',T.resp,T.all)}</div>
+ const tile=(k,v,a)=>`<div class="tile${a&&v>=a?' full':' alert'}"><div class="k">${esc(k)}</div><div class="v num">${v} <small>${t('of')} ${a}</small></div>${meter(v,a)}</div>`;
+ return `<div class="stick" id="staffStick"><div class="tiles">${tile(uk?'Посади укомплектовано':'Positions staffed',T.ok,T.all)}${tile('NDA',T.nda,T.all)}${tile(uk?'Безпека':'Security',T.sec,T.all)}${tile(uk?'Обов’язки підписано':'Duties signed',T.resp,T.all)}</div></div>
  ${nv?`<div class="vac"><div class="vh">${uk?'Вакантні посади':'Vacant positions'} · ${nv}</div>${[1,2,3,4].filter(l=>(T.vac[l]||[]).length).map(l=>`<div class="vl"><div class="vlh">${esc(n(LVN[l]))}</div><div>${T.vac[l].map(esc).join(', ')}</div></div>`).join('')}</div>`:''}`}
-const BW=190,BH=96,BG=8,HG=26,VG=48,AH=30;
-const kidsOf=o=>POS.filter(c=>c.parent===o.id&&!c.side);
-function colH(o){const k=slotsOf(o.id).length;return Math.max(0,k*BH+(k-1)*BG)+(o.multi?(k?BG:0)+AH:0)}
-function wid(o){const ks=kidsOf(o);if(!ks.length)return BW;return Math.max(BW,ks.reduce((a,c)=>a+wid(c),0)+HG*(ks.length-1))}
-function layout(){const out=[];let d='';
- function place(o,x,y){const w=wid(o);const cx=x+w/2;out.push({o,x:cx-BW/2,y});const ch=colH(o);const ks=kidsOf(o);
-  if(ks.length){const sw=ks.reduce((a,c)=>a+wid(c),0)+HG*(ks.length-1);let xx=x+(w-sw)/2;const by=y+ch+VG/2;const cy=y+ch+VG;const cxs=[];
-   ks.forEach(c=>{const cw=wid(c);cxs.push(xx+cw/2);place(c,xx,cy);xx+=cw+HG});
-   d+=`M${cx} ${y+ch}V${by}M${Math.min(cx,...cxs)} ${by}H${Math.max(cx,...cxs)}`;cxs.forEach(c=>d+=`M${c} ${by}V${cy}`)}}
- const root=POS.find(o=>!o.parent);if(!root)return{out,d,TW:0,TH:0};place(root,0,0);const mw=wid(root);let TW=mw;
- POS.filter(o=>o.side).forEach(side=>{const sx=TW+70;place(side,sx,0);d+=`M${mw/2+BW/2} ${BH/2}H${sx+wid(side)/2-BW/2}`;TW=sx+wid(side)});
- const TH=Math.max(...out.map(b=>b.y+colH(b.o)));return{out,d,TW,TH}}
-function boxHTML(o,s,i,x,y){const st=slotState(s);const uk=lang==='uk';const nmv=st==='off'?(uk?'Вимкнено':'Disabled'):st==='vacant'?(uk?'Вакансія':'Vacant'):s.nick;
- return `<button class="pbox st-${st}" data-sid="${s.id}" style="left:${x}px;top:${y}px;width:${BW}px;height:${BH}px"><span class="pr">${esc(slotLabel(o,i))}</span><span class="pn">${esc(nmv)}</span>${st==='off'?'':marks(s)}</button>`}
-function treeHTML(v){const Lo=layout();const avail=Math.max(320,v.clientWidth-2);const fit=Math.min(1,avail/(Lo.TW||1));const z=staffZoom==null?Math.max(.8,fit):staffZoom==='fit'?Math.max(.4,fit):staffZoom;let boxes='';
- Lo.out.forEach(({o,x,y})=>{const sl=slotsOf(o.id);sl.forEach((s,i)=>boxes+=boxHTML(o,s,i,x,y+i*(BH+BG)));if(o.multi){const ay=y+(sl.length?sl.length*(BH+BG):0);boxes+=`<button class="padd" data-addslot="${esc(o.id)}" style="left:${x}px;top:${ay}px;width:${BW}px;height:${AH}px">+ ${esc(nm(o,'slot'))}</button>`}});
+const BW=196,CH=96,HG=16,VG=44,VS=20,SG=8,STI=18,SIDEG=32;
+const bySort=(a,b)=>(a.sort??0)-(b.sort??0);
+const kidsOf=o=>POS.filter(c=>c.parent===o.id&&!c.side).sort(bySort);
+const allKids=o=>POS.filter(c=>c.parent===o.id).sort(bySort);
+const isChain=o=>{const k=allKids(o);return k.length<=1&&k.every(isChain)};
+const MKL={nda:{uk:'N',en:'N'},sec:{uk:'Б',en:'S'},resp:{uk:'О',en:'D'}};
+function posAgg(o){const act=slotsOf(o.id).filter(s=>!s.off);const filled=act.filter(s=>(s.nick||'').trim()).length;const ok=act.filter(s=>slotState(s)==='ok').length;
+ const docs={};DOCS.forEach(([k])=>docs[k]=act.filter(s=>docOk(s,k)).length);
+ const st=!act.length?'off':ok===act.length?'ok':filled?'partial':'vacant';return{act,filled,ok,docs,st}}
+function cardMarks(o){if(o.multi){const A=posAgg(o);const tot=A.act.length;return `<span class="mks">${DOCS.map(([k,l])=>{const c=A.docs[k];const cls=tot&&c===tot?' on':c?' part':'';return `<span class="mk${cls}" title="${esc(n(l))}: ${c} ${t('of')} ${tot}">${esc(n(MKL[k]))}</span>`}).join('')}</span>`}
+ const s=slotsOf(o.id)[0];if(!s||s.off)return'';return `<span class="mks">${DOCS.map(([k,l])=>`<span class="mk${docOk(s,k)?' on':''}" title="${esc(n(l))}${docOk(s,k)?' ✓':''}">${esc(n(MKL[k]))}</span>`).join('')}</span>`}
+function cardHTML(o,x,y,w){const uk=lang==='uk';let st,val,data;
+ if(o.multi){const A=posAgg(o);st=A.st;val=`<span class="cnt">${A.filled} ${t('of')} ${A.act.length}</span>`;data=`data-pid="${esc(o.id)}"`}
+ else{const s=slotsOf(o.id)[0];if(!s){st='vacant';val=esc(uk?'Немає місця':'No slot');data=`data-pid="${esc(o.id)}"`}else{st=slotState(s);val=esc(st==='off'?(uk?'Вимкнено':'Disabled'):st==='vacant'?(uk?'Вакансія':'Vacant'):s.nick);data=`data-sid="${s.id}"`}}
+ return `<button class="pbox st-${st}" ${data} style="left:${x}px;top:${y}px;width:${w}px;height:${CH}px"><span class="pr">${esc(nm(o,'name'))}</span><span class="pb"><span class="pn">${val}</span>${cardMarks(o)}</span></button>`}
+function layout(cols){cols=cols||1;const out=[];let d='';const root=POS.find(o=>!o.parent);if(!root)return{out,d,TW:0,TH:0};
+ const units=o=>{const ks=kidsOf(o);const leaves=ks.filter(c=>!kidsOf(c).length);if(leaves.length<2)return ks.map(c=>({c}));const u=[];let put=false;ks.forEach(c=>{if(kidsOf(c).length)u.push({c});else if(!put){put=true;u.push({leaves})}});return u};
+ const uw=u=>u.leaves?STI+BW:wid(u.c);
+ const wid=o=>{const us=units(o);if(!us.length)return BW;return Math.max(BW,us.reduce((a,u)=>a+uw(u),0)+HG*(us.length-1))};
+ function place(o,x,y){const w=wid(o);const cx=x+w/2;out.push({o,x:cx-BW/2,y,w:BW});const ks=kidsOf(o);
+  if(ks.length===1){place(ks[0],x,y+CH+VS);d+=`M${cx} ${y+CH}V${y+CH+VS}`}
+  else if(ks.length){const us=units(o);const by=y+CH+VG/2,cy=y+CH+VG;let xx=x+(w-(us.reduce((a,u)=>a+uw(u),0)+HG*(us.length-1)))/2;const cxs=[];
+   us.forEach(u=>{const cw=uw(u);if(u.leaves){cxs.push(xx);let yy=cy;u.leaves.forEach((c,i)=>{if(i)yy+=CH+SG;out.push({o:c,x:xx+STI,y:yy,w:BW});d+=`M${xx} ${yy+CH/2}H${xx+STI}`});d+=`M${xx} ${cy}V${yy+CH/2}`}else{cxs.push(xx+cw/2);place(u.c,xx,cy)}xx+=cw+HG});
+   d+=`M${cx} ${y+CH}V${by}M${Math.min(cx,...cxs)} ${by}H${Math.max(cx,...cxs)}`;cxs.forEach(c=>d+=`M${c} ${by}V${cy}`)}}
+ // stacked column: a chain of positions, each indented under the previous
+ function stack(o,x,y,depth){out.push({o,x:x+depth*STI,y,w:BW});let yy=y+CH;
+  allKids(o).forEach(c=>{const ny=yy+SG;const lx=x+depth*STI+10;d+=`M${lx} ${y+CH}V${ny+CH/2}H${x+(depth+1)*STI}`;yy=stack(c,x,ny,depth+1)});return yy}
+ const mains=kidsOf(root);const wide=mains.filter(o=>!isChain(o)),comb=mains.filter(o=>isChain(o));
+ const y1=CH+VG;let x=0;const tops=[];
+ wide.forEach(o=>{const w=wid(o);tops.push(x+w/2);place(o,x,y1);x+=w+HG});
+ const spines=[];
+ if(comb.length){const depth=o=>1+Math.max(0,...allKids(o).map(depth));const cnt=o=>1+allKids(o).reduce((a,c)=>a+cnt(c),0);
+  const groups=[[]];if(cols>1){const tot=comb.reduce((a,o)=>a+cnt(o),0);let acc=0;comb.forEach(o=>{if(acc>=tot/2&&groups.length<2)groups.push([]);groups[groups.length-1].push(o);acc+=cnt(o)})}else groups[0]=comb.slice();
+  let cx0=x+(wide.length?0:0);groups.forEach(g=>{if(!g.length)return;const sx=cx0;let yy=y1;let dep=1;
+   g.forEach((o,i)=>{const ty=i?yy+SG:yy;d+=`M${sx} ${ty+CH/2}H${sx+STI}`;yy=stack(o,sx,ty,1);dep=Math.max(dep,depth(o))});
+   const last=out.filter(b=>g.includes(b.o)).pop();spines.push([sx,last.y+CH/2]);tops.push(sx);cx0=sx+STI*dep+BW+HG});
+  x=cx0-HG}
+ const mainW=Math.max(comb.length?x:x-HG,BW);const rx=Math.max(0,mainW/2-BW/2);out.push({o:root,x:rx,y:0,w:BW});const rcx=rx+BW/2;
+ if(tops.length){const by=CH+VG/2;d+=`M${rcx} ${CH}V${by}M${Math.min(rcx,...tops)} ${by}H${Math.max(rcx,...tops)}`;
+  wide.forEach((o,i)=>d+=`M${tops[i]} ${by}V${y1}`);
+  spines.forEach(([sx,ly])=>d+=`M${sx} ${by}V${ly}`)}
+ let TW=Math.max(mainW,rx+BW);
+ POS.filter(o=>o.side&&o.parent===root.id).sort(bySort).forEach(sd=>{const sx=TW+SIDEG;d+=`M${rx+BW} ${CH/2}H${sx}`;
+  out.push({o:sd,x:sx,y:0,w:BW});let yy=CH;let px=sx+BW/2;
+  const down=(o,yTop)=>{allKids(o).forEach(c=>{const ny=Math.max(yTop+CH+VS,y1);d+=`M${px} ${yTop+CH}V${ny}`;out.push({o:c,x:sx,y:ny,w:BW});down(c,ny)})};down(sd,0);TW=sx+BW});
+ const TH=Math.max(...out.map(b=>b.y+CH));return{out,d,TW,TH}}
+function treeHTML(v){const avail=Math.max(320,v.clientWidth-30);const st=document.getElementById('staffStick');const sh=st?Math.min(st.offsetHeight,70):60;const vh=window.innerHeight-sh-70;
+ const cand=[1,2].map(c=>{const L=layout(c);const wf=avail/(L.TW||1),hf=vh/(L.TH||1);return{L,wf,hf,full:Math.min(1.12,wf,hf)}});
+ let pick=cand.reduce((a,b)=>b.full>a.full?b:a);let fit=pick.full;if(fit<.8){pick=cand[0];fit=Math.min(1.12,pick.wf,Math.max(pick.hf,.9))}const Lo=pick.L;const z=staffZoom==null||staffZoom==='fit'?fit:staffZoom;let boxes='';
+ Lo.out.forEach(({o,x,y,w})=>boxes+=cardHTML(o,x,y,w));
  return {z,html:`<div class="tw" id="treeWrap"><div style="width:${Lo.TW*z}px;height:${Lo.TH*z}px;position:relative"><div class="tc" style="width:${Lo.TW}px;height:${Lo.TH}px;transform:scale(${z})"><svg class="tl" width="${Lo.TW}" height="${Lo.TH}" aria-hidden="true"><path d="${Lo.d}"/></svg>${boxes}</div></div></div>`}}
+function mkLegend(){const uk=lang==='uk';return `<div class="mklegend">${DOCS.map(([k,l])=>`<span><span class="mk on">${esc(n(MKL[k]))}</span>${esc(n(l))}</span>`).join('')}<span>${uk?'зелене — є, контур — немає, жовтий контур — частково':'green — done, outline — missing, yellow outline — partly'}</span></div>`}
 function listHTML(){const root=POS.find(o=>!o.parent);if(root&&!staffOpen.size)staffOpen.add(root.id);
  const node=o=>{const ks=POS.filter(c=>c.parent===o.id).sort((a,b)=>(b.side?1:0)-(a.side?1:0));const sl=slotsOf(o.id);const act=sl.filter(s=>!s.off);const ok=act.filter(s=>slotState(s)==='ok').length;
   return `<details class="fold" data-fold="${esc(o.id)}"${staffOpen.has(o.id)?' open':''}><summary><span class="fn">${esc(nm(o,'name'))}</span><span class="fc num">${ok}/${act.length}</span></summary><div class="fb">
@@ -414,28 +453,39 @@ function listHTML(){const root=POS.find(o=>!o.parent);if(root&&!staffOpen.size)s
  return root?`<div class="flist">${node(root)}</div>`:''}
 const staffMode=()=>staffView==='auto'?(window.innerWidth>=900?'tree':'list'):staffView;
 function renderStaff(v){const uk=lang==='uk';const mode=staffMode();const tw=document.getElementById('treeWrap');const sc=tw?[tw.scrollLeft,tw.scrollTop]:null;
- v.innerHTML=`<div class="stw"><div id="staffSum">${staffSummary()}</div>
+ v.innerHTML=`<div class="stw">${staffSummary()}
  <div class="sbar"><p class="lead">${uk?'Лише позивні, без справжніх імен. Натисніть на посаду, щоб відкрити картку.':'Nicknames only, no real names. Click a position to open its card.'}</p>
- <div class="sctl"><div class="seg" role="group"><button data-view="tree" aria-pressed="${mode==='tree'}">${uk?'Дерево':'Tree'}</button><button data-view="list" aria-pressed="${mode==='list'}">${uk?'Список':'List'}</button></div>
- ${mode==='tree'?`<div class="seg" role="group" aria-label="Zoom"><button data-zoom="-">−</button><button data-zoom="fit">${uk?'Вмістити':'Fit'}</button><button data-zoom="+">+</button></div>`:''}</div></div><div id="staffBody"></div></div>`;
+ <div class="sctl">${mode==='tree'?'':''}<div class="seg" role="group"><button data-view="tree" aria-pressed="${mode==='tree'}">${uk?'Дерево':'Tree'}</button><button data-view="list" aria-pressed="${mode==='list'}">${uk?'Список':'List'}</button></div>
+ ${mode==='tree'?`<div class="seg" role="group" aria-label="Zoom"><button data-zoom="-">−</button><button data-zoom="fit">${uk?'Вмістити':'Fit'}</button><button data-zoom="+">+</button></div>`:''}</div></div>${mode==='tree'?mkLegend():''}<div id="staffBody"></div></div>`;
  const body=v.querySelector('#staffBody');
  if(mode==='tree'){const T=treeHTML(body);body.innerHTML=T.html;staffZoomCur=T.z;const w=document.getElementById('treeWrap');if(sc){w.scrollLeft=sc[0];w.scrollTop=sc[1]}}else body.innerHTML=listHTML();
  v.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{staffView=b.dataset.view;renderStaff(v)});
  v.querySelectorAll('[data-zoom]').forEach(b=>b.onclick=()=>{const z=b.dataset.zoom;staffZoom=z==='fit'?'fit':Math.max(.4,Math.min(1.4,Math.round((staffZoomCur+(z==='+'?.1:-.1))*10)/10));renderStaff(v)});
- v.querySelectorAll('.pbox,.lrow').forEach(b=>b.onclick=()=>openSlot(b.dataset.sid));
+ v.querySelectorAll('.pbox,.lrow').forEach(b=>b.onclick=()=>b.dataset.pid?openPos(b.dataset.pid):openSlot(b.dataset.sid));
+ watchStick();
  v.querySelectorAll('[data-addslot]').forEach(b=>b.onclick=async()=>{const pid=b.dataset.addslot;const idx=slotsOf(pid).reduce((a,s)=>Math.max(a,s.idx),-1)+1;
   const {data,error}=await sb.from('staff_slots').insert({position_id:pid,idx}).select().single();if(error){toast(t('saveErr')+error.message,true);return}SLOTS.push(data);renderStaff(v)});
  v.querySelectorAll('details.fold').forEach(d=>d.addEventListener('toggle',()=>{d.open?staffOpen.add(d.dataset.fold):staffOpen.delete(d.dataset.fold)}));
 }
 function refreshStaff(){if(tab==='staff'){const v=document.getElementById('view');if(v)renderStaff(v)}}
-function openSlot(sid){drawer=()=>drawSlot(sid);drawer()}
+function openSlot(sid,from){drawer=()=>drawSlot(sid,from);drawer()}
+function openPos(pid){drawer=()=>drawPos(pid);drawer()}
+function drawPos(pid){const o=posOf(pid);if(!o)return closeDrawer();const uk=lang==='uk';const par=posOf(o.report_to||o.parent);const A=posAgg(o);
+ shell(`<div class="dhead"><div><div class="meta">${esc(n(LVN[o.level]))}${par?' · '+(uk?'звітує: ':'reports to: ')+esc(nm(par,'name')):''}</div><h2>${esc(nm(o,'name'))}</h2><div class="meta">${uk?'Зайнято':'Filled'} ${A.filled} ${t('of')} ${A.act.length} · ${uk?'повністю оформлено':'fully documented'} ${A.ok}</div></div><button class="xbtn" data-close>${esc(t('close'))}</button></div>
+ <div class="plist">${slotsOf(o.id).map((s,i)=>{const st=slotState(s);return `<button class="lrow st-${st}" data-sid="${s.id}"><span class="ln">${esc(s.nick&&!s.off?s.nick:slotLabel(o,i))}</span><span class="pill ${stPill(st)}">${esc(stText(s))}</span>${st==='off'?'':marks(s)}</button>`}).join('')}
+ <button class="ladd" data-addslot="${esc(o.id)}">+ ${esc(nm(o,'slot')||(uk?'Місце':'Slot'))}</button></div>`);
+ dr.querySelectorAll('.lrow').forEach(b=>b.onclick=()=>openSlot(b.dataset.sid,pid));
+ dr.querySelectorAll('[data-addslot]').forEach(b=>b.onclick=async()=>{const idx=slotsOf(pid).reduce((a,s)=>Math.max(a,s.idx),-1)+1;
+  const {data,error}=await sb.from('staff_slots').insert({position_id:pid,idx}).select().single();if(error){toast(t('saveErr')+error.message,true);return}SLOTS.push(data);refreshStaff();drawPos(pid)})}
+let stickBound=false;function watchStick(){const upd=()=>{const el=document.getElementById('staffStick');if(!el)return;el.classList.toggle('stuck',el.getBoundingClientRect().top<=0.5&&window.scrollY>40)};
+ if(!stickBound){stickBound=true;window.addEventListener('scroll',upd,{passive:true});window.addEventListener('resize',()=>{if(tab==='staff'&&staffZoom==null)refreshStaff()})}upd()}
 const slotTimers={};
 function saveSlot(s,patch,now){Object.assign(s,patch);const key=s.id+Object.keys(patch).join();clearTimeout(slotTimers[key]);const go=()=>save(sb.from('staff_slots').update(patch).eq('id',s.id));if(now)go();else slotTimers[key]=setTimeout(go,700)}
 async function openTemplate(o){const w=window.open('','_blank');const {data,error}=await sb.storage.from('templates').createSignedUrl(o.template,3600);
  if(error||!data){if(w)w.close();toast((lang==='uk'?'Шаблон не знайдено у сховищі: ':'Template not found in storage: ')+o.template,true);return}
  if(w)w.location=data.signedUrl;else location.href=data.signedUrl}
-function drawSlot(sid){const s=SLOTS.find(x=>x.id===sid);if(!s)return closeDrawer();const o=posOf(s.position_id);const i=slotsOf(o.id).indexOf(s);const uk=lang==='uk';const par=posOf(o.report_to||o.parent);const st=slotState(s);
- shell(`<div class="dhead"><div><div class="meta">${esc(n(LVN[o.level]))}${par?' · '+(uk?'звітує: ':'reports to: ')+esc(nm(par,'name')):''}</div><h2>${esc(slotLabel(o,i))}</h2>${o.multi?`<div class="meta">${esc(nm(o,'name'))}</div>`:''}</div><button class="xbtn" data-close>${esc(t('close'))}</button></div>
+function drawSlot(sid,from){const s=SLOTS.find(x=>x.id===sid);if(!s)return closeDrawer();const o=posOf(s.position_id);const i=slotsOf(o.id).indexOf(s);const uk=lang==='uk';const par=posOf(o.report_to||o.parent);const st=slotState(s);
+ shell(`<div class="dhead"><div><div class="meta">${esc(n(LVN[o.level]))}${par?' · '+(uk?'звітує: ':'reports to: ')+esc(nm(par,'name')):''}</div><h2>${esc(slotLabel(o,i))}</h2>${o.multi?`<div class="meta">${esc(nm(o,'name'))}</div>`:''}</div><div style="display:flex;gap:6px">${from?`<button class="xbtn" data-back>← ${esc(nm(o,'name'))}</button>`:''}<button class="xbtn" data-close>${esc(t('close'))}</button></div></div>
  <span class="pill ${stPill(st)}" id="sdSt" style="align-self:flex-start">${esc(stText(s))}</span>
  <label class="fl">${uk?'Позивний':'Nickname'}<input class="inp" id="sd-nick" value="${esc(s.nick)}" placeholder="${esc(slotLabel(o,i))}"></label>
  <div class="sdocs">${DOCS.map(([k,l])=>`<div class="dr"><label><input type="checkbox" data-k="${k}"${s[k]?' checked':''}> ${esc(n(l))}</label><input class="inp url" data-l="${k}" value="${esc(s[k+'_link'])}" placeholder="${uk?'Посилання на документ':'Document link'}" aria-label="${esc(n(l))}"><span data-lk="${k}">${isUrl(s[k+'_link'])?`<a class="ext" href="${esc(s[k+'_link'])}" target="_blank" rel="noopener noreferrer">↗</a>`:''}</span></div>`).join('')}</div>
@@ -443,6 +493,7 @@ function drawSlot(sid){const s=SLOTS.find(x=>x.id===sid);if(!s)return closeDrawe
  <div class="offbox"><label class="offl"><input type="checkbox" id="sd-off"${s.off?' checked':''}> ${uk?'Посада вимкнена (не потрібна)':'Position disabled (not needed)'}</label>
  <label class="fl">${uk?'Коментар: хто виконує обов’язки, посилання на документ за потреби':'Comment: who takes over the duties, document link if needed'}<textarea class="inp" id="sd-note" rows="3">${esc(s.note)}</textarea></label><div class="notev" id="sdNote">${/https:\/\//.test(s.note||'')?linkify(s.note):''}</div></div>
  ${o.multi?`<button class="btn warn" id="sd-del" style="align-self:flex-start">${uk?'Прибрати це місце':'Remove this slot'}</button>`:''}`);
+ if(from){const bb=dr.querySelector('[data-back]');if(bb)bb.onclick=()=>openPos(from)}
  const qd=x=>dr.querySelector(x);
  const upd=()=>{const p=qd('#sdSt');if(p){const s2=slotState(s);p.className='pill '+stPill(s2);p.textContent=stText(s)}refreshStaff()};
  qd('#sd-nick').addEventListener('input',e=>{saveSlot(s,{nick:e.target.value.trim()});upd()});
