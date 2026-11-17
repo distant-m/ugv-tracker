@@ -31,7 +31,7 @@ const monthEnd=m=>addDays(addMonths(START,m),-1);
 const MON={uk:['січ','лют','бер','кві','тра','чер','лип','сер','вер','жов','лис','гру'],en:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']};
 const L={uk:{
  tab_gantt:'Графік',tab_ind:'Показники',tab_proc:'Закупівлі',tab_tasks:'Задачі адміністратора',tab_staff:'Персонал',tab_users:'Користувачі',tab_log:'Журнал',
- role_admin:'Адміністратор',role_user:'Користувач',role_viewer:'Глядач',logout:'Вийти',export:'Вивантажити в Excel',
+ role_admin:'Адміністратор',role_user:'Користувач',role_viewer:'Глядач',logout:'Вийти',export:'Вивантажити (Excel + копія)',
  lg_future:'Майбутнє',lg_active:'Триває',lg_done:'Завершено',lg_late:'Прострочено / бракує даних',today:'Сьогодні',month:'М',
  st_future:'Майбутнє',st_active:'Триває',st_done:'Завершено',st_late:'Прострочено',
  of:'з',expected:'очікувано на сьогодні',goal10:'ціль ≥10%',k_w:'Жінок серед сертифікованих',k_late:'Груп із недоліками',lateHint:'завершені групи без повних даних',
@@ -53,11 +53,11 @@ const L={uk:{
  ps_planned:'Заплановано',ps_ordered:'Замовлено',ps_paid:'Оплачено',ps_received:'Отримано',
  sec_launch:'Запуск (місяці 1–6)',sec_cycle:'Для кожної групи',sec_period:'Щомісяця / щокварталу / щопівроку',sec_close:'Завершення проєкту',sec_custom:'Власні задачі',
  add:'Додати',addPh:'Нова задача',due:'до',overdue:'прострочено',every:'Кожна група',monthly:'Щомісяця',sem:'Щопівроку',q:'Щокварталу',fromProc:'із закупівель',
- saved:'Збережено',saveErr:'Не вдалося зберегти: ',exportDue:'Минуло понад 14 днів від останнього вивантаження даних. Вивантажте повний статус проєкту в Excel.',exportNever:'Дані ще жодного разу не вивантажувалися. Вивантажте повний статус проєкту в Excel.',
+ saved:'Збережено',saveErr:'Не вдалося зберегти: ',exportDue:'Минуло понад 7 днів від останнього вивантаження. Вивантажте статус проєкту (Excel) і резервну копію (JSON) — збережіть обидва файли на своєму комп’ютері.',exportNever:'Дані ще жодного разу не вивантажувалися. Вивантажте повний статус проєкту в Excel.',
  lastExport:'Останнє вивантаження: '
 },en:{
  tab_gantt:'Timeline',tab_ind:'Indicators',tab_proc:'Procurement',tab_tasks:'Admin tasks',tab_staff:'Staff',tab_users:'Users',tab_log:'Change log',
- role_admin:'Administrator',role_user:'User',role_viewer:'Viewer',logout:'Sign out',export:'Export to Excel',
+ role_admin:'Administrator',role_user:'User',role_viewer:'Viewer',logout:'Sign out',export:'Export (Excel + backup)',
  lg_future:'Upcoming',lg_active:'In progress',lg_done:'Completed',lg_late:'Overdue / data missing',today:'Today',month:'M',
  st_future:'Upcoming',st_active:'In progress',st_done:'Completed',st_late:'Overdue',
  of:'of',expected:'expected by today',goal10:'target ≥10%',k_w:'Women among certified',k_late:'Groups with gaps',lateHint:'completed groups with incomplete data',
@@ -79,7 +79,7 @@ const L={uk:{
  ps_planned:'Planned',ps_ordered:'Ordered',ps_paid:'Paid',ps_received:'Received',
  sec_launch:'Launch (months 1–6)',sec_cycle:'For every group',sec_period:'Monthly / quarterly / semi-annually',sec_close:'Project close-out',sec_custom:'Own tasks',
  add:'Add',addPh:'New task',due:'by',overdue:'overdue',every:'Every group',monthly:'Monthly',sem:'Semi-annually',q:'Quarterly',fromProc:'from procurement',
- saved:'Saved',saveErr:'Could not save: ',exportDue:'More than 14 days since the last data export. Export the full project status to Excel.',exportNever:'Data has never been exported. Export the full project status to Excel.',
+ saved:'Saved',saveErr:'Could not save: ',exportDue:'More than 7 days since the last export. Export the project status (Excel) and the backup (JSON) and keep both files on your computer.',exportNever:'Data has never been exported. Export the full project status to Excel.',
  lastExport:'Last export: '
 }};
 let lang='uk';try{lang=localStorage.getItem('lang')||'uk'}catch(e){}
@@ -205,7 +205,7 @@ function meter(cur,target,expected){const w=Math.min(100,target?cur/target*100:0
 
 /* ---------- shell ---------- */
 function exportBanner(){if(!isAdmin())return'';const le=SETTINGS.last_export;if(!le)return `<div class="banner"><span>${esc(t('exportNever'))}</span><button class="btn" data-export>${esc(t('export'))}</button></div>`;
- const d=new Date(le);if((Date.now()-d)/DAY>14)return `<div class="banner"><span>${esc(t('exportDue'))} ${esc(t('lastExport'))}${fmtDT(le)}</span><button class="btn" data-export>${esc(t('export'))}</button></div>`;return''}
+ const d=new Date(le);if((Date.now()-d)/DAY>7)return `<div class="banner"><span>${esc(t('exportDue'))} ${esc(t('lastExport'))}${fmtDT(le)}</span><button class="btn" data-export>${esc(t('export'))}</button></div>`;return''}
 const isDark=()=>document.documentElement.dataset.theme==='dark';
 function setTheme(m){if(m==='dark')document.documentElement.dataset.theme='dark';else delete document.documentElement.dataset.theme;try{localStorage.setItem('theme',m)}catch(e){}}
 function render(){
@@ -579,6 +579,11 @@ function drawLog(v){const uk=lang==='uk';const whos=[...new Set(LOG.map(e=>e.act
 function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}
 
 /* ---------- export ---------- */
+/* Резервна копія: усі таблиці як JSON (для відновлення через SQL) */
+const BACKUP_TABLES=['settings','tracks','stages','groups','procurement','indicators','admin_tasks','positions','staff_slots','profiles','audit_log'];
+async function backupJson(ds,stamp){const out={format:'ugv-tracker-backup',version:1,created:stamp.toISOString(),by:USER.email,tables:{}};
+ for(const tb of BACKUP_TABLES){let rows=[],from=0;for(;;){const {data,error}=await sb.from(tb).select('*').range(from,from+999);if(error){toast((lang==='uk'?'Резервна копія: помилка в таблиці ':'Backup: error in table ')+tb+' — '+error.message,true);return false}rows=rows.concat(data);if(data.length<1000)break;from+=1000}out.tables[tb]=rows}
+ const blob=new Blob([JSON.stringify(out,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`backup_${ds}.json`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);return true}
 async function exportXlsx(){if(!window.XLSX){toast('XLSX library not loaded',true);return}
  const uk=lang==='uk';const T=totals();const wb=XLSX.utils.book_new();const add=(name,rows)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),name);
  add(uk?'Етапи':'Phases',STAGES.map(s=>{const gs=G.filter(g=>g.start>=s.start&&g.start<=s.end);return{[uk?'Етап':'Phase']:s.idx,[uk?'Назва':'Name']:nm(s,'name'),[uk?'Початок':'Start']:fmt(s.start),[uk?'Кінець':'End']:fmt(s.end),[uk?'Статус':'Status']:t('st_'+stageStatus(s)),[uk?'Груп':'Groups']:gs.length,[uk?'Навчено (сертифіковано / охоплено)':'Trained']:gs.reduce((a,g)=>a+(g.type==='event'?0:factOf(g)),0),[uk?'Жінок':'Women']:gs.reduce((a,g)=>a+(num(g.facts.cert_f)||0)+(num(g.facts.covered_f)||0),0)}}));
@@ -588,7 +593,8 @@ async function exportXlsx(){if(!window.XLSX){toast('XLSX library not loaded',tru
  add(uk?'Закупівлі':'Procurement',PROC.map(p=>({[t('th_item')]:nm(p,'name'),[t('th_qty')]:p.qty,[t('th_due')]:fmt(monthEnd(p.due_month)),[t('th_status')]:t('ps_'+p.status),[t('th_doc')]:p.link})));
  add(uk?'Задачі':'Tasks',TASKS.map(x=>({[uk?'Розділ':'Section']:t('sec_'+x.section),[uk?'Задача':'Task']:nm(x,'title'),[uk?'Виконано':'Done']:x.done?'✓':'',[uk?'Посилання':'Link']:x.link})));
  add(uk?'Персонал':'Staff',POS.flatMap(o=>slotsOf(o.id).map((s,i)=>({[uk?'Посада':'Position']:slotLabel(o,i),[uk?'Позивний':'Nickname']:s.nick,[uk?'Статус':'Status']:stText(s),NDA:s.nda_link,[uk?'Безпека':'Security']:s.sec_link,[uk?'Обов’язки':'Duties']:s.resp_link,[uk?'Коментар':'Comment']:s.note}))));
- const stamp=new Date();XLSX.writeFile(wb,`status_${stamp.getFullYear()}-${p2(stamp.getMonth()+1)}-${p2(stamp.getDate())}.xlsx`);
+ const stamp=new Date();const ds=`${stamp.getFullYear()}-${p2(stamp.getMonth()+1)}-${p2(stamp.getDate())}`;XLSX.writeFile(wb,`status_${ds}.xlsx`);
+ if(!(await backupJson(ds,stamp)))return;
  const iso=stamp.toISOString();if(await save(sb.from('settings').upsert({key:'last_export',value:iso}))){SETTINGS.last_export=iso;render()}}
 
 start();
