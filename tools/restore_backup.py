@@ -7,7 +7,7 @@ usage: python3 restore_backup.py backup_2026-11-22.json [--exact] > restore.sql
   --exact  – also deletes rows that are not in the backup (content tables only),
              so the system looks exactly as on the backup date.
 The audit log is never deleted or changed: missing entries are only added back.
-Profiles are restored only for logins that still exist in Supabase Auth.
+Roles/tracks are restored by email for people who already have a login (invite them again first in a new project).
 """
 import json, sys
 
@@ -53,9 +53,9 @@ def main():
             out.append(f"delete from public.{tb} where {pk}::text <> all (select jsonb_array_elements_text({lit(keys)}));")
     prof = T.get('profiles') or []
     if prof:
-        cols = [c for c in sorted({k for r in prof for k in r}) if c != 'id']
+        cols = [c for c in sorted({k for r in prof for k in r}) if c not in ('id', 'email')]
         sets = ', '.join(f'{c} = b.{c}' for c in cols)
-        out.append(f"update public.profiles p set {sets}\n  from jsonb_populate_recordset(null::public.profiles, {lit(prof)}) b where p.id = b.id;")
+        out.append(f"update public.profiles p set {sets}\n  from jsonb_populate_recordset(null::public.profiles, {lit(prof)}) b where lower(p.email) = lower(b.email);")
     aud = T.get('audit_log') or []
     if aud:
         cols = sorted({k for r in aud for k in r})
