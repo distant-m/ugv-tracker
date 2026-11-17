@@ -243,3 +243,7 @@ b.fmt{padding-top:4px}
 .tile .ks{display:none}
 .stick.stuck .tile .kf{display:none}
 .stick.stuck .tile .ks{display:inline}
+.town{font-size:13px;color:var(--muted)}
+.tbar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+.tbar .lead{font-size:14.5px;color:var(--muted)}
+.tbar .lead b{color:var(--fg)}

@@ -30,8 +30,8 @@ const monthEnd=m=>addDays(addMonths(START,m),-1);
 /* ---------- i18n ---------- */
 const MON={uk:['січ','лют','бер','кві','тра','чер','лип','сер','вер','жов','лис','гру'],en:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']};
 const L={uk:{
- tab_gantt:'Графік',tab_ind:'Показники',tab_proc:'Закупівлі',tab_tasks:'Задачі адміністратора',tab_staff:'Персонал',tab_users:'Користувачі',tab_log:'Журнал',
- role_admin:'Адміністратор',role_user:'Користувач',role_viewer:'Глядач',logout:'Вийти',export:'Вивантажити (Excel + копія)',
+ tab_gantt:'Графік',tab_ind:'Показники',tab_proc:'Закупівлі',tab_tasks:'Задачі',tab_staff:'Персонал',tab_users:'Користувачі',tab_log:'Журнал',
+ role_admin:'Адміністратор',role_user:'Користувач',role_viewer:'Глядач',role_observer:'Суперспостерігач',logout:'Вийти',export:'Вивантажити (Excel + копія)',
  lg_future:'Майбутнє',lg_active:'Триває',lg_done:'Завершено',lg_late:'Прострочено / бракує даних',today:'Сьогодні',month:'М',
  st_future:'Майбутнє',st_active:'Триває',st_done:'Завершено',st_late:'Прострочено',
  of:'з',expected:'очікувано на сьогодні',goal10:'ціль ≥10%',k_w:'Жінок серед сертифікованих',k_late:'Груп із недоліками',lateHint:'завершені групи без повних даних',
@@ -53,11 +53,11 @@ const L={uk:{
  ps_planned:'Заплановано',ps_ordered:'Замовлено',ps_paid:'Оплачено',ps_received:'Отримано',
  sec_launch:'Запуск (місяці 1–6)',sec_cycle:'Для кожної групи',sec_period:'Щомісяця / щокварталу / щопівроку',sec_close:'Завершення проєкту',sec_custom:'Власні задачі',
  add:'Додати',addPh:'Нова задача',due:'до',overdue:'прострочено',every:'Кожна група',monthly:'Щомісяця',sem:'Щопівроку',q:'Щокварталу',fromProc:'із закупівель',
- saved:'Збережено',saveErr:'Не вдалося зберегти: ',exportDue:'Минуло понад 7 днів від останнього вивантаження. Вивантажте статус проєкту (Excel) і резервну копію (JSON) — збережіть обидва файли на своєму комп’ютері.',exportNever:'Дані ще жодного разу не вивантажувалися. Вивантажте повний статус проєкту в Excel.',
+ saved:'Збережено',saveErr:'Не вдалося зберегти: ',exportDue:'Минуло понад 7 днів від останнього вивантаження. Вивантажте статус проєкту (Excel) і резервну копію (JSON) — збережіть обидва файли на своєму комп’ютері.',exportNever:'Дані ще жодного разу не вивантажувалися. Вивантажте статус проєкту (Excel) і резервну копію (JSON) та збережіть їх на своєму комп’ютері.',
  lastExport:'Останнє вивантаження: '
 },en:{
- tab_gantt:'Timeline',tab_ind:'Indicators',tab_proc:'Procurement',tab_tasks:'Admin tasks',tab_staff:'Staff',tab_users:'Users',tab_log:'Change log',
- role_admin:'Administrator',role_user:'User',role_viewer:'Viewer',logout:'Sign out',export:'Export (Excel + backup)',
+ tab_gantt:'Timeline',tab_ind:'Indicators',tab_proc:'Procurement',tab_tasks:'Tasks',tab_staff:'Staff',tab_users:'Users',tab_log:'Change log',
+ role_admin:'Administrator',role_user:'User',role_viewer:'Viewer',role_observer:'Super observer',logout:'Sign out',export:'Export (Excel + backup)',
  lg_future:'Upcoming',lg_active:'In progress',lg_done:'Completed',lg_late:'Overdue / data missing',today:'Today',month:'M',
  st_future:'Upcoming',st_active:'In progress',st_done:'Completed',st_late:'Overdue',
  of:'of',expected:'expected by today',goal10:'target ≥10%',k_w:'Women among certified',k_late:'Groups with gaps',lateHint:'completed groups with incomplete data',
@@ -79,7 +79,7 @@ const L={uk:{
  ps_planned:'Planned',ps_ordered:'Ordered',ps_paid:'Paid',ps_received:'Received',
  sec_launch:'Launch (months 1–6)',sec_cycle:'For every group',sec_period:'Monthly / quarterly / semi-annually',sec_close:'Project close-out',sec_custom:'Own tasks',
  add:'Add',addPh:'New task',due:'by',overdue:'overdue',every:'Every group',monthly:'Monthly',sem:'Semi-annually',q:'Quarterly',fromProc:'from procurement',
- saved:'Saved',saveErr:'Could not save: ',exportDue:'More than 7 days since the last export. Export the project status (Excel) and the backup (JSON) and keep both files on your computer.',exportNever:'Data has never been exported. Export the full project status to Excel.',
+ saved:'Saved',saveErr:'Could not save: ',exportDue:'More than 7 days since the last export. Export the project status (Excel) and the backup (JSON) and keep both files on your computer.',exportNever:'Data has never been exported. Export the project status (Excel) and the backup (JSON) and keep them on your computer.',
  lastExport:'Last export: '
 }};
 let lang='uk';try{lang=localStorage.getItem('lang')||'uk'}catch(e){}
@@ -96,7 +96,7 @@ let USER=null,PROFILE=null,role='viewer';
 let SETTINGS={},TRACKS=[],STAGES=[],G=[],PROC=[],IND=[],TASKS=[],POS=[],SLOTS=[],PROFILES=[];
 let tab='gantt';
 const filters={};
-const isAdmin=()=>role==='admin';
+const isAdmin=()=>role==='admin';const isObs=()=>role==='observer';const canReadAll=()=>isAdmin()||isObs();
 
 /* ---------- auth screens ---------- */
 const app=document.getElementById('app');
@@ -141,7 +141,9 @@ async function loadAll(){
  G=gr.map(g=>({...g,start:parseD(g.start_date),end:parseD(g.end_date),facts:g.facts||{},docs:g.docs||{}}));
  PROC=pr;IND=ind;
  TRACKS.forEach(tk=>{if(!(tk.tag in filters))filters[tk.tag]=true});
- if(isAdmin()){const [ta,po,sl,pf]=await Promise.all([q('admin_tasks','sort'),q('positions','sort'),q('staff_slots','idx'),q('profiles','created_at')]);TASKS=ta;POS=po;SLOTS=sl;PROFILES=pf}
+ if(canReadAll()){const [po,sl,pf]=await Promise.all([q('positions','sort'),q('staff_slots','idx'),q('profiles','created_at')]);POS=po;SLOTS=sl;PROFILES=pf}
+ else{try{POS=await q('positions','sort')}catch(e){POS=[]}}
+ if(!isObs()){try{TASKS=await q('admin_tasks','sort')}catch(e){TASKS=[]}}
 }
 async function start(){
  const {data:{session}}=await sb.auth.getSession();
@@ -211,7 +213,7 @@ function setTheme(m){if(m==='dark')document.documentElement.dataset.theme='dark'
 function render(){
  document.documentElement.lang=lang;const title=n(SETTINGS.project_title)||'Система контролю';document.title=title;
  const tabs=[['gantt','tab_gantt'],['indicators','tab_ind'],['procurement','tab_proc']];
- if(isAdmin())tabs.push(['staff','tab_staff'],['tasks','tab_tasks'],['users','tab_users'],['log','tab_log']);
+ if(canReadAll())tabs.push(['staff','tab_staff']);if(!isObs())tabs.push(['tasks','tab_tasks']);if(canReadAll())tabs.push(['users','tab_users'],['log','tab_log']);
  if(!tabs.find(x=>x[0]===tab))tab='gantt';
  app.innerHTML=`<header class="top"><div class="brand"><h1>${esc(title)}</h1><p>${esc(n(SETTINGS.project_subtitle))}</p></div>
   <div class="controls"><span class="who">${esc(PROFILE.nickname||PROFILE.email)} · ${esc(t('role_'+role))}</span>
@@ -375,36 +377,66 @@ function renderProc(v){
 
 /* ---------- admin tasks ---------- */
 /* Автоматичні задачі «для кожної групи»: admin_tasks.auto = doc:<поле>[@тип] | facts */
+const myTracks=()=>PROFILE.tracks||[];
+const taskMine=x=>x.created_by===USER.id||(!!PROFILE.position_id&&(x.owners||[]).includes(PROFILE.position_id))||(x.tracks||[]).some(t=>myTracks().includes(t));
+const canTick=x=>isAdmin()||(role==='user'&&taskMine(x));
 function autoTask(x){const a=x.auto;if(!a)return null;const [rule,only]=a.split('@');const ty=g=>TYPES[g.type]||{facts:[],docs:[]};
+ const scope=isAdmin()||!myTracks().length?null:myTracks().filter(t=>!(x.tracks||[]).length||(x.tracks||[]).includes(t));
+ const inScope=g=>!scope||!scope.length||scope.includes(g.track_id);
  let pool,ok;
- if(rule==='facts'){pool=G.filter(g=>(!only||g.type===only)&&(ty(g).facts.length||ty(g).docs.length)&&diff(g.end,TODAY)>3);ok=g=>!missing(g).length}
+ if(rule==='facts'){pool=G.filter(g=>inScope(g)&&(!only||g.type===only)&&(ty(g).facts.length||ty(g).docs.length)&&diff(g.end,TODAY)>3);ok=g=>!missing(g).length}
  else if(rule.startsWith('doc:')){const d=rule.slice(4);const after=d==='request'||d==='entry'?'start':'end';
-  pool=G.filter(g=>(!only||g.type===only)&&ty(g).docs.includes(d)&&(after==='start'?TODAY>=g.start:TODAY>g.end));ok=g=>!!(g.docs[d]||'').trim()}
+  pool=G.filter(g=>inScope(g)&&(!only||g.type===only)&&ty(g).docs.includes(d)&&(after==='start'?TODAY>=g.start:TODAY>g.end));ok=g=>!!(g.docs[d]||'').trim()}
  else return null;
  const miss=pool.filter(g=>!ok(g));return{total:pool.length,done:pool.length-miss.length,miss}}
-const openAuto=new Set();
+const openAuto=new Set();let taskView=null;
+function ownersText(x){const ps=(x.owners||[]).map(id=>posOf(id)).filter(Boolean).map(o=>nm(o,'name'));const ts=(x.tracks||[]).map(id=>TRACKS.find(t=>t.id===id)).filter(Boolean).map(t=>t.tag+' '+nm(t,'name').split(' · ').pop());
+ return [ps.join(', '),ts.length?(lang==='uk'?'треки: ':'tracks: ')+ts.join(', '):''].filter(Boolean).join(' · ')}
 function renderTasks(v){const fr={every:t('every'),monthly:t('monthly'),q:t('q'),sem:t('sem')};const uk=lang==='uk';
+ if(taskView===null)taskView=isAdmin()&&!PROFILE.position_id?'all':'mine';const showAll=isAdmin()&&taskView==='all';
+ const visible=x=>showAll||taskMine(x);
+ const own=x=>`<div class="town">${esc(ownersText(x)||(uk?'відповідальних не призначено':'no one assigned'))}${isAdmin()?` <button class="linkbtn" data-ow="${esc(x.id)}">${uk?'змінити':'change'}</button>`:''}</div>`;
  const autoRow=(x,A)=>{const all=A.total&&!A.miss.length;const open=openAuto.has(x.id);
   return `<div class="task auto"><span class="aic ${A.total?(all?'ok':'miss'):'wait'}">${A.total?(all?'✓':'!'):'·'}</span><div class="tt">${esc(nm(x,'title'))}</div>
   <div class="tm"><span class="pill ${A.total?(all?'p-done':'p-late'):'p-muted'}">${A.total?`${A.done} ${t('of')} ${A.total} ${uk?'груп':'groups'}`:(uk?'ще немає груп для перевірки':'no groups to check yet')}</span>
   ${A.miss.length?`<button class="linkbtn" data-am="${esc(x.id)}">${open?(uk?'Сховати':'Hide'):(uk?'Показати групи без цього':'Show groups missing it')} (${A.miss.length})</button>`:''}</div>
   ${A.total?`<div class="tm">${meter(A.done,A.total)}</div>`:''}
-  ${open&&A.miss.length?`<div class="tm"><div class="lategroups">${A.miss.map(g=>`<button data-open="g" data-id="${esc(g.id)}">${esc(trackOf(g.track_id).tag)} · ${esc(nm(g,'title'))}</button>`).join('')}</div></div>`:''}</div>`};
- const taskRow=x=>{const dueD=x.due_month?monthEnd(x.due_month):null;const od=dueD&&!x.done&&TODAY>dueD;
-  return `<div class="task ${x.done?'done':''}"><input type="checkbox" id="tk-${esc(x.id)}" data-tk="${esc(x.id)}" ${x.done?'checked':''}><label class="tt" for="tk-${esc(x.id)}">${esc(nm(x,'title'))}</label>
+  ${open&&A.miss.length?`<div class="tm"><div class="lategroups">${A.miss.map(g=>`<button data-open="g" data-id="${esc(g.id)}">${esc(trackOf(g.track_id).tag)} · ${esc(nm(g,'title'))}</button>`).join('')}</div></div>`:''}<div class="tm">${own(x)}</div></div>`};
+ const taskRow=x=>{const dueD=x.due_month?monthEnd(x.due_month):null;const od=dueD&&!x.done&&TODAY>dueD;const ed=canTick(x);const mineDel=x.section==='custom'&&(isAdmin()||x.created_by===USER.id)&&role!=='viewer';
+  return `<div class="task ${x.done?'done':''}"><input type="checkbox" id="tk-${esc(x.id)}" data-tk="${esc(x.id)}" ${x.done?'checked':''}${ed?'':' disabled'}><label class="tt" for="tk-${esc(x.id)}">${esc(nm(x,'title'))}</label>
   <div class="tm">${dueD?`<span class="pill ${od?'p-late':x.done?'p-done':'p-muted'}">${esc(t('due'))} ${fmt(dueD)} · ${t('month')}${x.due_month}${od?' · '+esc(t('overdue')):''}</span>`:''}${x.freq?`<span class="pill p-muted">${esc(fr[x.freq]||x.freq)}</span>`:''}
-  <input class="inp url" data-tl="${esc(x.id)}" value="${esc(x.link)}" placeholder="${esc(t('paste'))}" aria-label="link">${isUrl(x.link)?`<a class="ext" href="${esc(x.link)}" target="_blank" rel="noopener noreferrer">${esc(t('open'))} ↗</a>`:''}</div></div>`};
- const sec=k=>{const xs=TASKS.filter(x=>x.section===k);const d=xs.filter(x=>{const A=autoTask(x);return A?(A.total>0&&!A.miss.length):x.done}).length;
-  return `<section class="panel"><h2>${esc(t('sec_'+k))} <span class="num ns">${d}/${xs.length}</span></h2>${xs.some(x=>x.auto)?`<p class="lead">${uk?'Рахується автоматично з карток груп на графіку: після початку групи — заявка й вхідний тест, після завершення — решта.':'Counted automatically from the group cards on the chart: request and entry test once a group starts, the rest once it ends.'}</p>`:''}<div>${xs.map(x=>{const A=autoTask(x);return A?autoRow(x,A):taskRow(x)}).join('')}</div>${k==='custom'?`<form class="addrow" id="addForm"><input class="inp" id="newTask" placeholder="${esc(t('addPh'))}" aria-label="${esc(t('addPh'))}"><button class="btn" type="submit">${esc(t('add'))}</button></form>`:''}</section>`};
- v.innerHTML=`<div class="cols">${sec('launch')}<div style="display:flex;flex-direction:column;gap:16px">${sec('cycle')}${sec('period')}${sec('close')}${sec('custom')}</div></div>`;
+  ${ed?`<input class="inp url" data-tl="${esc(x.id)}" value="${esc(x.link)}" placeholder="${esc(t('paste'))}" aria-label="link">`:''}${isUrl(x.link)?`<a class="ext" href="${esc(x.link)}" target="_blank" rel="noopener noreferrer">${esc(t('open'))} ↗</a>`:''}${mineDel?` <button class="linkbtn" data-tdel="${esc(x.id)}">${uk?'видалити':'delete'}</button>`:''}</div><div class="tm">${own(x)}</div></div>`};
+ const canAdd=isAdmin()||role==='user';
+ const sec=k=>{const xs=TASKS.filter(x=>x.section===k&&visible(x));if(!xs.length&&!(k==='custom'&&canAdd))return'';const d=xs.filter(x=>{const A=autoTask(x);return A?(A.total>0&&!A.miss.length):x.done}).length;
+  return `<section class="panel"><h2>${esc(t('sec_'+k))} <span class="num ns">${d}/${xs.length}</span></h2>${xs.some(x=>x.auto)?`<p class="lead">${uk?'Рахується автоматично з карток груп на графіку: після початку групи — заявка й вхідний тест, після завершення — решта.':'Counted automatically from the group cards on the chart: request and entry test once a group starts, the rest once it ends.'}</p>`:''}<div>${xs.map(x=>{const A=autoTask(x);return A?autoRow(x,A):taskRow(x)}).join('')}</div>${k==='custom'&&canAdd?`<form class="addrow" id="addForm"><input class="inp" id="newTask" placeholder="${esc(t('addPh'))}" aria-label="${esc(t('addPh'))}"><button class="btn" type="submit">${esc(t('add'))}</button></form>`:''}</section>`};
+ const pos=posOf(PROFILE.position_id);
+ const head=`<div class="tbar"><div class="lead">${pos?`${uk?'Ваша посада:':'Your position:'} <b>${esc(nm(pos,'name'))}</b>`:(uk?'Посаду в структурі не призначено — адміністратор призначає її у вкладці «Користувачі».':'No position assigned yet — the administrator sets it in Users.')}${myTracks().length?` · ${uk?'треки:':'tracks:'} ${esc(myTracks().map(id=>{const tk=TRACKS.find(x=>x.id===id);return tk?nm(tk,'name'):id}).join(', '))}`:''}${role==='viewer'?` · ${uk?'лише перегляд':'view only'}`:''}</div>
+  ${isAdmin()?`<div class="seg" role="group"><button data-tv="mine" aria-pressed="${taskView==='mine'}">${uk?'Мої':'Mine'}</button><button data-tv="all" aria-pressed="${taskView==='all'}">${uk?'Усі задачі проєкту':'All project tasks'}</button></div>`:''}</div>`;
+ const left=sec('launch'),right=[sec('cycle'),sec('period'),sec('close'),sec('custom')].join('');
+ const any=TASKS.some(visible);
+ v.innerHTML=`<div style="display:flex;flex-direction:column;gap:14px">${head}${!any&&!canAdd?`<div class="panel"><p class="lead">${uk?'Для вас поки немає задач.':'No tasks for you yet.'}</p></div>`:''}<div class="cols">${left?left:''}<div style="display:flex;flex-direction:column;gap:16px">${right}</div></div></div>`;
  const upd=(id,patch)=>{const x=TASKS.find(y=>y.id===id);Object.assign(x,patch);save(sb.from('admin_tasks').update(patch).eq('id',id)).then(()=>renderTasks(v))};
+ v.querySelectorAll('[data-tv]').forEach(b=>b.onclick=()=>{taskView=b.dataset.tv;renderTasks(v)});
  v.querySelectorAll('[data-tk]').forEach(c=>c.onchange=()=>upd(c.dataset.tk,{done:c.checked}));
  v.querySelectorAll('[data-am]').forEach(b=>b.onclick=()=>{const id=b.dataset.am;openAuto.has(id)?openAuto.delete(id):openAuto.add(id);renderTasks(v)});
  v.querySelectorAll('.task.auto [data-open]').forEach(b=>b.onclick=()=>openDrawer('g',b.dataset.id));
  v.querySelectorAll('[data-tl]').forEach(c=>c.onchange=()=>upd(c.dataset.tl,{link:c.value.trim()}));
- v.querySelector('#addForm').onsubmit=async e=>{e.preventDefault();const val=v.querySelector('#newTask').value.trim();if(!val)return;
-  const row={id:'u'+Date.now(),section:'custom',title_uk:val,title_en:val,sort:1000+TASKS.length};if(await save(sb.from('admin_tasks').insert(row))){TASKS.push({...row,done:false,link:''});renderTasks(v)}};
+ v.querySelectorAll('[data-ow]').forEach(b=>b.onclick=()=>{drawer=()=>drawOwners(b.dataset.ow,v);drawer()});
+ v.querySelectorAll('[data-tdel]').forEach(b=>b.onclick=async()=>{if(b.dataset.armed!=='1'){b.dataset.armed='1';b.textContent=uk?'точно видалити?':'really delete?';return}
+  if(await save(sb.from('admin_tasks').delete().eq('id',b.dataset.tdel))){TASKS=TASKS.filter(x=>x.id!==b.dataset.tdel);renderTasks(v)}});
+ const af=v.querySelector('#addForm');if(af)af.onsubmit=async e=>{e.preventDefault();const val=v.querySelector('#newTask').value.trim();if(!val)return;
+  const row={id:'u'+Date.now(),section:'custom',title_uk:val,title_en:val,sort:1000+TASKS.length,created_by:USER.id,owners:PROFILE.position_id?[PROFILE.position_id]:[],tracks:[]};if(await save(sb.from('admin_tasks').insert(row))){TASKS.push({...row,done:false,link:''});renderTasks(v)}};
 }
+function drawOwners(id,v){const x=TASKS.find(y=>y.id===id);if(!x)return closeDrawer();const uk=lang==='uk';
+ const tr=TRACKS.filter(tk=>tk.kind==='training'||tk.kind==='event');
+ shell(`<div class="dhead"><div><div class="meta">${uk?'Хто відповідає за задачу':'Who is responsible'}</div><h2>${esc(nm(x,'title'))}</h2></div><button class="xbtn" data-close>${esc(t('close'))}</button></div>
+ <div class="fl">${uk?'Посади (бачать задачу й можуть її відмічати)':'Positions (see and tick the task)'}</div>
+ <div class="trk">${POS.map(o=>`<label><input type="checkbox" data-op="${esc(o.id)}"${(x.owners||[]).includes(o.id)?' checked':''}> ${esc(nm(o,'name'))}</label>`).join('')}</div>
+ <div class="fl" style="margin-top:10px">${uk?'Треки (задачу бачать усі, кому відкрито ці треки)':'Tracks (everyone with these tracks sees the task)'}</div>
+ <div class="trk">${tr.map(tk=>`<label><input type="checkbox" data-otr="${esc(tk.id)}"${(x.tracks||[]).includes(tk.id)?' checked':''}> ${esc(tk.tag)} · ${esc(nm(tk,'name'))}</label>`).join('')}</div>`);
+ const sv=()=>{const owners=[...dr.querySelectorAll('[data-op]:checked')].map(c=>c.dataset.op),tracks=[...dr.querySelectorAll('[data-otr]:checked')].map(c=>c.dataset.otr);x.owners=owners;x.tracks=tracks;save(sb.from('admin_tasks').update({owners,tracks}).eq('id',id)).then(()=>renderTasks(v))};
+ dr.querySelectorAll('[data-op],[data-otr]').forEach(c=>c.onchange=sv)}
+
 
 /* ---------- staff ---------- */
 const DOCS=[['nda',{uk:'NDA',en:'NDA'},{uk:'NDA',en:'NDA'}],['sec',{uk:'Безпека',en:'Security'},{uk:'Безп.',en:'Sec.'}],['resp',{uk:'Обов’язки',en:'Duties'},{uk:'Обов.',en:'Duties'}]];
@@ -493,11 +525,12 @@ function renderStaff(v){const uk=lang==='uk';const mode=staffMode();const tw=doc
  v.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{staffView=b.dataset.view;renderStaff(v)});
  v.querySelectorAll('[data-zoom]').forEach(b=>b.onclick=()=>{const z=b.dataset.zoom;staffZoom=z==='fit'?'fit':Math.max(.4,Math.min(1.4,Math.round((staffZoomCur+(z==='+'?.1:-.1))*10)/10));renderStaff(v)});
  v.querySelectorAll('.pbox,.lrow').forEach(b=>b.onclick=()=>b.dataset.pid?openPos(b.dataset.pid):openSlot(b.dataset.sid));
- watchStick();
+ watchStick();if(!isAdmin())roLock(v.querySelector('#staffBody')||v);
  v.querySelectorAll('[data-addslot]').forEach(b=>b.onclick=async()=>{const pid=b.dataset.addslot;const idx=slotsOf(pid).reduce((a,s)=>Math.max(a,s.idx),-1)+1;
   const {data,error}=await sb.from('staff_slots').insert({position_id:pid,idx}).select().single();if(error){toast(t('saveErr')+error.message,true);return}SLOTS.push(data);renderStaff(v)});
  v.querySelectorAll('details.fold').forEach(d=>d.addEventListener('toggle',()=>{d.open?staffOpen.add(d.dataset.fold):staffOpen.delete(d.dataset.fold)}));
 }
+function roLock(root){root.querySelectorAll('input,textarea,select').forEach(e=>e.disabled=true);root.querySelectorAll('[data-addslot],#sd-del').forEach(e=>e.remove())}
 function refreshStaff(){if(tab==='staff'){const v=document.getElementById('view');if(v)renderStaff(v)}}
 function openSlot(sid,from){drawer=()=>drawSlot(sid,from);drawer()}
 function openPos(pid){drawer=()=>drawPos(pid);drawer()}
@@ -505,7 +538,7 @@ function drawPos(pid){const o=posOf(pid);if(!o)return closeDrawer();const uk=lan
  shell(`<div class="dhead"><div><div class="meta">${esc(n(LVN[o.level]))}${par?' · '+(uk?'звітує: ':'reports to: ')+esc(nm(par,'name')):''}</div><h2>${esc(nm(o,'name'))}</h2><div class="meta">${uk?'Зайнято':'Filled'} ${A.filled} ${t('of')} ${A.act.length} · ${uk?'повністю оформлено':'fully documented'} ${A.ok}</div></div><button class="xbtn" data-close>${esc(t('close'))}</button></div>
  <div class="plist">${slotsOf(o.id).map((s,i)=>{const st=slotState(s);return `<button class="lrow st-${st}" data-sid="${s.id}"><span class="ln">${esc(s.nick&&!s.off?s.nick:slotLabel(o,i))}</span><span class="pill ${stPill(st)}">${esc(stText(s))}</span>${st==='off'?'':marks(s)}</button>`}).join('')}
  <button class="ladd" data-addslot="${esc(o.id)}">+ ${esc(nm(o,'slot')||(uk?'Місце':'Slot'))}</button></div>`);
- dr.querySelectorAll('.lrow').forEach(b=>b.onclick=()=>openSlot(b.dataset.sid,pid));
+ dr.querySelectorAll('.lrow').forEach(b=>b.onclick=()=>openSlot(b.dataset.sid,pid));if(!isAdmin())roLock(dr);
  dr.querySelectorAll('[data-addslot]').forEach(b=>b.onclick=async()=>{const idx=slotsOf(pid).reduce((a,s)=>Math.max(a,s.idx),-1)+1;
   const {data,error}=await sb.from('staff_slots').insert({position_id:pid,idx}).select().single();if(error){toast(t('saveErr')+error.message,true);return}SLOTS.push(data);refreshStaff();drawPos(pid)})}
 let stickBound=false;function watchStick(){const upd=()=>{const el=document.getElementById('pageStick');if(!el)return;const was=el.classList.contains('stuck');const vw0=document.getElementById('view');if(!was){el.dataset.fh=el.offsetHeight;if(vw0)vw0.style.minHeight=Math.ceil(el.parentElement.getBoundingClientRect().top-vw0.getBoundingClientRect().top+window.innerHeight-24)+'px'}const now=el.getBoundingClientRect().top<=0.5&&window.scrollY>40;if(now!==was)el.classList.toggle('stuck',now)};
@@ -525,6 +558,7 @@ function drawSlot(sid,from){const s=SLOTS.find(x=>x.id===sid);if(!s)return close
  <label class="fl">${uk?'Коментар: хто виконує обов’язки, посилання на документ за потреби':'Comment: who takes over the duties, document link if needed'}<textarea class="inp" id="sd-note" rows="3">${esc(s.note)}</textarea></label><div class="notev" id="sdNote">${/https:\/\//.test(s.note||'')?linkify(s.note):''}</div></div>
  ${o.multi?`<button class="btn warn" id="sd-del" style="align-self:flex-start">${uk?'Прибрати це місце':'Remove this slot'}</button>`:''}`);
  if(from){const bb=dr.querySelector('[data-back]');if(bb)bb.onclick=()=>openPos(from)}
+ if(!isAdmin()){roLock(dr);return}
  const qd=x=>dr.querySelector(x);
  const upd=()=>{const p=qd('#sdSt');if(p){const s2=slotState(s);p.className='pill '+stPill(s2);p.textContent=stText(s)}refreshStaff()};
  qd('#sd-nick').addEventListener('input',e=>{saveSlot(s,{nick:e.target.value.trim()});upd()});
@@ -540,17 +574,20 @@ let staffRT;window.addEventListener('resize',()=>{clearTimeout(staffRT);staffRT=
 
 /* ---------- users ---------- */
 function renderUsers(v){const uk=lang==='uk';const tr=TRACKS.filter(tk=>tk.kind==='training'||tk.kind==='event');
- v.innerHTML=`<section class="panel"><h2>${esc(t('tab_users'))}</h2><p class="lead">${uk?'Нових користувачів запрошуйте в Supabase: Authentication → Users → Invite user. Після першого входу людина з’явиться тут з роллю «Глядач». Користувач редагує лише позначені треки.':'Invite new users in Supabase: Authentication → Users → Invite user. After the first sign-in they appear here as Viewer. A user edits only the ticked tracks.'}</p>
- <div class="tblwrap"><table class="utbl"><thead><tr><th>${uk?'Пошта':'Email'}</th><th>${uk?'Позивний':'Nickname'}</th><th>${uk?'Роль':'Role'}</th><th>${uk?'Треки (для ролі «Користувач»)':'Tracks (for User role)'}</th><th>${uk?'Активний':'Active'}</th></tr></thead><tbody>
+ v.innerHTML=`<section class="panel"><h2>${esc(t('tab_users'))}</h2><p class="lead">${uk?'Нових користувачів запрошуйте в Supabase: Authentication → Users → Invite user. Після першого входу людина з’явиться тут з роллю «Глядач». Користувач редагує лише позначені треки. Суперспостерігач бачить усе (персонал, користувачів, журнал), але нічого не змінює. «Посада в структурі» визначає, які задачі людина бачить у вкладці «Задачі».':'Invite new users in Supabase: Authentication → Users → Invite user. After the first sign-in they appear here as Viewer. A user edits only the ticked tracks. The super observer sees everything (staff, users, change log) but cannot change anything. The position decides which tasks a person sees in Tasks.'}</p>
+ <div class="tblwrap"><table class="utbl"><thead><tr><th>${uk?'Пошта':'Email'}</th><th>${uk?'Позивний':'Nickname'}</th><th>${uk?'Роль':'Role'}</th><th>${uk?'Посада в структурі (для задач)':'Position (for tasks)'}</th><th>${uk?'Треки (для ролі «Користувач»)':'Tracks (for User role)'}</th><th>${uk?'Активний':'Active'}</th></tr></thead><tbody>
  ${PROFILES.map(p=>`<tr data-uid="${p.id}"><td>${esc(p.email)}</td><td><input class="inp" type="text" data-u="nickname" value="${esc(p.nickname||'')}"></td>
-  <td><select class="inp" data-u="role"${p.id===USER.id?' disabled':''}>${['admin','user','viewer'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${esc(t('role_'+r))}</option>`).join('')}</select></td>
+  <td><select class="inp" data-u="role"${p.id===USER.id?' disabled':''}>${['admin','observer','user','viewer'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${esc(t('role_'+r))}</option>`).join('')}</select></td>
+  <td><select class="inp" data-u="position_id"><option value="">—</option>${POS.map(o=>`<option value="${esc(o.id)}"${p.position_id===o.id?' selected':''}>${esc(nm(o,'name'))}</option>`).join('')}</select></td>
   <td><div class="trk">${tr.map(tk=>`<label><input type="checkbox" data-ut="${esc(tk.id)}"${(p.tracks||[]).includes(tk.id)?' checked':''}> ${esc(nm(tk,'name'))}</label>`).join('')}</div></td>
   <td><input type="checkbox" data-u="active"${p.active?' checked':''}${p.id===USER.id?' disabled':''}></td></tr>`).join('')}
  </tbody></table></div></section>`;
  v.querySelectorAll('tr[data-uid]').forEach(row=>{const p=PROFILES.find(x=>x.id===row.dataset.uid);
-  row.querySelectorAll('[data-u]').forEach(el=>el.onchange=()=>{const f=el.dataset.u;const val=el.type==='checkbox'?el.checked:el.value.trim();p[f]=val;save(sb.from('profiles').update({[f]:val}).eq('id',p.id))});
+  row.querySelectorAll('[data-u]').forEach(el=>el.onchange=()=>{const f=el.dataset.u;const val=el.type==='checkbox'?el.checked:(f==='position_id'&&!el.value?null:el.value.trim());p[f]=val;save(sb.from('profiles').update({[f]:val}).eq('id',p.id))});
   row.querySelectorAll('[data-ut]').forEach(el=>el.onchange=()=>{p.tracks=[...row.querySelectorAll('[data-ut]:checked')].map(x=>x.dataset.ut);save(sb.from('profiles').update({tracks:p.tracks}).eq('id',p.id))})});
+ if(!isAdmin())roLock(v);
 }
+
 
 /* ---------- change log ---------- */
 let LOG=[],logFilter={who:'',tbl:''};

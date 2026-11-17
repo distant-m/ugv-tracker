@@ -301,3 +301,94 @@ begin
 end $$;
 revoke all on function public.set_project_start(date) from public, anon;
 grant execute on function public.set_project_start(date) to authenticated;
+
+-- ---------- Задачі для всіх ролей і роль «Суперспостерігач» (observer) ----------
+alter type public.app_role add value if not exists 'observer';
+
+
+-- Посада людини в структурі (для її задач)
+alter table public.profiles add column if not exists position_id text references public.positions(id) on delete set null;
+
+-- Відповідальні посади й треки задачі; хто створив власну задачу
+alter table public.admin_tasks add column if not exists owners text[] not null default '{}';
+alter table public.admin_tasks add column if not exists tracks text[] not null default '{}';
+alter table public.admin_tasks add column if not exists created_by uuid;
+
+-- Допоміжні функції
+create or replace function public.can_read_all() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce(public.my_role()::text in ('admin','observer'), false)
+$$;
+create or replace function public.task_mine(p_owners text[], p_tracks text[], p_creator uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.profiles p
+                  where p.id = auth.uid() and p.active and p.role::text = 'user'
+                    and (p_creator = p.id
+                         or (p.position_id is not null and p.position_id = any(p_owners))
+                         or (p.tracks && p_tracks)))
+$$;
+revoke all on function public.can_read_all(), public.task_mine(text[], text[], uuid) from public, anon;
+grant execute on function public.can_read_all(), public.task_mine(text[], text[], uuid) to authenticated;
+
+-- Персонал і журнал: читають адміністратор і суперспостерігач; змінює лише адміністратор
+-- (назви посад читають усі учасники — для вкладки «Задачі»)
+do $$ declare t text; begin
+  foreach t in array array['staff_slots','positions'] loop
+    execute format('drop policy if exists %1$s_admin on public.%1$I', t);
+    execute format('drop policy if exists %1$s_read on public.%1$I', t);
+    execute format('drop policy if exists %1$s_write on public.%1$I', t);
+    execute format('create policy %1$s_read on public.%1$I for select to authenticated using (public.can_read_all())', t);
+    execute format('create policy %1$s_write on public.%1$I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t);
+  end loop;
+end $$;
+drop policy if exists positions_read on public.positions;
+create policy positions_read on public.positions for select to authenticated using (public.is_member());
+drop policy if exists audit_select on public.audit_log;
+create policy audit_select on public.audit_log for select to authenticated using (public.can_read_all());
+drop policy if exists profiles_select on public.profiles;
+create policy profiles_select on public.profiles for select to authenticated using (id = auth.uid() or public.can_read_all());
+
+-- Задачі: читають усі учасники; адміністратор — усе; користувач — відмічає свої задачі й додає власні
+drop policy if exists admin_tasks_admin on public.admin_tasks;
+drop policy if exists admin_tasks_read on public.admin_tasks;
+drop policy if exists admin_tasks_write on public.admin_tasks;
+drop policy if exists admin_tasks_user_update on public.admin_tasks;
+drop policy if exists admin_tasks_user_insert on public.admin_tasks;
+drop policy if exists admin_tasks_user_delete on public.admin_tasks;
+create policy admin_tasks_read on public.admin_tasks for select to authenticated using (public.is_member());
+create policy admin_tasks_write on public.admin_tasks for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy admin_tasks_user_update on public.admin_tasks for update to authenticated
+  using (public.task_mine(owners, tracks, created_by)) with check (public.task_mine(owners, tracks, created_by));
+create policy admin_tasks_user_insert on public.admin_tasks for insert to authenticated
+  with check (section = 'custom' and created_by = auth.uid() and public.my_role()::text = 'user');
+create policy admin_tasks_user_delete on public.admin_tasks for delete to authenticated
+  using (section = 'custom' and created_by = auth.uid() and public.my_role()::text = 'user');
+
+-- Користувач у чужих задачах змінює лише позначку й посилання
+create or replace function public.admin_tasks_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is not null and not public.is_admin()
+     and old.created_by is distinct from auth.uid()
+     and (new.id, new.section, new.title_uk, new.title_en, new.due_month, new.freq, new.sort, new.owners, new.tracks, new.created_by, new.auto)
+         is distinct from
+         (old.id, old.section, old.title_uk, old.title_en, old.due_month, old.freq, old.sort, old.owners, old.tracks, old.created_by, old.auto) then
+    raise exception 'У цій задачі можна змінити лише позначку виконання й посилання';
+  end if;
+  return new;
+end $$;
+drop trigger if exists admin_tasks_guard on public.admin_tasks;
+create trigger admin_tasks_guard before update on public.admin_tasks for each row execute function public.admin_tasks_guard();
+
+-- Роль, треки, посаду й активність змінює лише адміністратор
+create or replace function public.profiles_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is not null and not public.is_admin()
+     and (new.role, new.tracks, new.active, new.email, new.position_id)
+         is distinct from (old.role, old.tracks, old.active, old.email, old.position_id) then
+    raise exception 'Змінювати роль і доступ може лише адміністратор';
+  end if;
+  return new;
+end $$;
+
