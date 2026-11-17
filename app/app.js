@@ -236,7 +236,7 @@ window.addEventListener('hashchange',route);
 let ppd=5,scrolled=false;
 function renderGantt(v){
  const T=totals();const wShare=pct(T.certF,T.cert);
- const tiles=TRACKS.filter(tk=>tk.kind==='training'&&tk.target).map(tk=>{const b=T.byTrack[tk.id];return `<div class="tile"><div class="k">${esc(tk.tag)} · ${esc(nm(tk,'name'))}</div><div class="v num">${fmtN(b.fact)} <small>${t('of')} ${esc(tk.target_label||tk.target)}</small></div>${meter(b.fact,tk.target,b.exp)}<div class="s">${esc(t('expected'))}: <span class="num">${fmtN(b.exp)}</span></div></div>`}).join('');
+ const tiles=TRACKS.filter(tk=>tk.kind==='training'&&tk.target).map(tk=>{const b=T.byTrack[tk.id];const full=nm(tk,'name');const sh=full.split(' · ').pop();return `<div class="tile"><div class="k"><span class="kf">${esc(tk.tag)} · ${esc(full)}</span><span class="ks">${esc(tk.tag)} · ${esc(sh)}</span></div><div class="v num">${fmtN(b.fact)} <small>${t('of')} ${esc(tk.target_label||tk.target)}</small></div>${meter(b.fact,tk.target,b.exp)}<div class="s">${esc(t('expected'))}: <span class="num">${fmtN(b.exp)}</span></div></div>`}).join('');
  const tags=[...new Set(TRACKS.map(tk=>tk.tag))].filter(x=>x!=='ЕТАПИ');
  v.innerHTML=`<div style="display:flex;flex-direction:column;gap:14px">
  <div class="stick" id="pageStick"><div class="tiles">${tiles}
@@ -338,7 +338,7 @@ function indValue(r,T){const uk=lang==='uk';const pp=uk?' п.п.':' pp';const sr
  if(m==='evpart')return{v:T.evPart,txt:fmtN(T.evPart)};
  if(m==='women')return{v:T.certF,txt:`${fmtPct(pct(T.certF,T.cert))} · ${fmtN(T.certF)}`};
  if(m==='gap'){const a=pct(T.certF,T.stF),b=pct(T.certM,T.stM);const g=a!==null&&b!==null?Math.abs(a-b):null;return{v:null,txt:g===null?'—':(Math.round(g*10)/10)+pp}}
- if(m.startsWith('track:')){const b=T.byTrack[m.slice(6)]||{fact:0};return{v:b.fact,txt:fmtN(b.fact)}}
+ if(m.startsWith('track:')){const f=m.slice(6).split('+').reduce((a,id)=>a+((T.byTrack[id]||{fact:0}).fact||0),0);return{v:f,txt:fmtN(f)}}
  if(m==='online')return{v:T.lect+T.evHeld+T.press,txt:`${T.lect} / ${T.evHeld} / ${T.press}`};
  if(m==='kits')return{v:T.kits,txt:`${T.kits} · ${T.workshop?(uk?'так':'yes'):(uk?'ні':'no')}`};
  return{v:null,txt:'—'};
